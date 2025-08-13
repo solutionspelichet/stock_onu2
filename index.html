@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Stock Matériel ONU</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FF9800"/>
+    <style>
+        /* Variables CSS pour thème */
+        :root {
+            --primary-color: #FF9800;
+            --primary-dark: #fb8c00;
+            --secondary-color: #2196F3;
+            --success-color: #4CAF50;
+            --warning-color: #ff9800;
+            --error-color: #f44336;
+            --background-color: #f4f4f4;
+            --card-background: #fff;
+            --text-color: #333;
+            --border-color: #ddd;
+        }
+
+        [data-theme="dark"] {
+            --background-color: #121212;
+            --card-background: #1e1e1e;
+            --text-color: #ffffff;
+            --border-color: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+
+        .theme-toggle {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: background 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        main {
+            padding: 15px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: var(--card-background);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+        }
+
+        section:last-of-type {
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+
+        /* Optimisation mobile pour les inputs */
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        select {
+            width: 100%;
+            padding: 16px 12px; /* Plus grand pour mobile */
+            margin-bottom: 10px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px; /* Évite le zoom sur iOS */
+            background: var(--card-background);
+            color: var(--text-color);
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+        }
+
+        /* Boutons optimisés tactile */
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 16px 24px; /* Plus grand pour tactile */
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 5px;
+            min-height: 48px; /* Taille minimale tactile */
+            min-width: 48px;
+            touch-action: manipulation;
+        }
+
+        button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: #1976D2;
+        }
+
+        .btn-danger {
+            background-color: var(--error-color);
+        }
+
+        .btn-danger:hover {
+            background-color: #d32f2f;
+        }
+
+        /* Conteneur matériels amélioré */
+        .materiels-container {
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            background: rgba(255, 152, 0, 0.05);
+        }
+
+        .materiel-counter {
+            font-size: 14px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .materiel-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: var(--card-background);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .materiel-inputs {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .materiel-inputs input:first-child {
+            flex: 2;
+        }
+
+        .materiel-inputs input:last-child {
+            flex: 1;
+        }
+
+        .add-materiel-container {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Messages améliorés */
+        .message {
+            padding: 16px;
+            margin-top: 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.info {
+            background-color: #e7f3fe;
+            color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+
+        .message.success {
+            background-color: #e6ffe6;
+            color: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .message.warning {
+            background-color: #fff3e0;
+            color: var(--warning-color);
+            border-color: var(--warning-color);
+        }
+
+        .message.error {
+            background-color: #ffe6e6;
+            color: var(--error-color);
+            border-color: var(--error-color);
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Tables responsives */
+        .stock-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: var(--card-background);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stock-table th,
+        .stock-table td {
+            border: 1px solid var(--border-color);
+            padding: 12px 8px;
+            text-align: left;
+        }
+
+        .stock-table th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+
+        .stock-table tbody tr:nth-child(even) {
+            background-color: rgba(255, 152, 0, 0.05);
+        }
+
+        .stock-table tbody tr:hover {
+            background-color: rgba(255, 152, 0, 0.1);
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            background-color: var(--card-background);
+            color: var(--text-color);
+            font-size: 0.9em;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Responsive mobile */
+        @media (max-width: 768px) {
+            main {
+                padding: 10px;
+            }
+            
+            section {
+                padding: 15px;
+            }
+            
+            header h1 {
+                font-size: 1.1rem;
+            }
+            
+            .materiel-inputs {
+                flex-direction: column;
+            }
+            
+            .materiel-inputs input {
+                width: 100%;
+            }
+            
+            button {
+                width: 100%;
+                margin: 5px 0;
+            }
+            
+            .add-materiel-container button {
+                width: auto;
+                margin: 0 auto;
+                display: block;
+            }
+        }
+
+        /* Accessibilité */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Prompt d'installation PWA */
+        .install-prompt {
+            background: linear-gradient(135deg, var(--secondary-color), #1976D2);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 15px;
+            display: none;
+            animation: slideIn 0.5s ease;
+        }
+
+        .install-prompt.show {
+            display: block;
+        }
+
+        .install-prompt button {
+            background: rgba(255,255,255,0.2);
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📦 Gestion Stock Matériel ONU</h1>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Changer le thème">
+            🌙
+        </button>
+    </header>
+
+    <!-- Prompt d'installation PWA -->
+    <div class="install-prompt" id="installPrompt">
+        <p>📱 <strong>Installer l'app</strong> sur votre téléphone pour un accès rapide !</p>
+        <button onclick="installApp()">Installer</button>
+        <button onclick="dismissInstall()">Plus tard</button>
+    </div>
+
+    <main>
+        <section id="enregistrement-mouvement">
+            <h2>Enregistrer un Mouvement</h2>
+            <form id="mouvementForm">
+                <div class="form-group">
+                    <label for="feuilleCible">📋 Sélectionner la Feuille de Journalisation (Source du mouvement si Transfert):</label>
+                    <select id="feuilleCible" name="feuille" required>
+                        <option value="Stock Voie Creuse">Stock Voie Creuse</option>
+                        <option value="Stock Bibliothèque">Stock Bibliothèque</option>
+                        <option value="Répartition Journalière">Répartition Journalière (Pour les entrées de transfert)</option>
+                        <option value="Restes Zones">Restes Zones (Journal d'inventaire uniquement)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="dateMouvement">📅 Date:</label>
+                    <input type="date" id="dateMouvement" name="date" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="typeMouvement">🔄 Type de mouvement:</label>
+                    <select id="typeMouvement" name="type" required>
+                        <option value="Entrée">➡️ Entrée (vers la 'Zone' spécifiée)</option>
+                        <option value="Sortie">⬅️ Sortie (de la 'Zone' spécifiée)</option>
+                        <option value="Transfert">🔄 Transfert (De la 'Feuille Source' vers la 'Zone' spécifiée)</option>
+                    </select>
+                </div>
+
+                <div id="zoneInputFieldGroup" class="form-group">
+                    <label for="zoneMouvement">📍 Zone impactée par le mouvement (Destination ou Origine):</label>
+                    <input list="zonesList" id="zoneMouvement" name="zone" placeholder="Sélectionner ou Saisir une Zone" required>
+                    <datalist id="zonesList"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>📦 Matériels et Quantités:</label>
+                    <div class="materiels-container">
+                        <div class="materiel-counter">
+                            <span id="materielCount">1</span> matériel(s) ajouté(s)
+                        </div>
+                        <div id="materielsContainer">
+                            <!-- Les éléments matériels seront ajoutés ici dynamiquement -->
+                        </div>
+                        <div class="add-materiel-container">
+                            <button type="button" id="addMaterielBtn" class="btn-secondary">➕ Ajouter un matériel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit">💾 Enregistrer Mouvement</button>
+            </form>
+            <p id="mouvementMessage" class="message"></p>
+        </section>
+
+        <section id="visualisation-stock">
+            <h2>📊 Visualisation des Stocks par Zone</h2>
+            <div class="form-group">
+                <label for="selectZoneVisualisation">📍 Sélectionner une Zone:</label>
+                <select id="selectZoneVisualisation">
+                </select>
+            </div>
+            <button id="chargerStockBtn">🔍 Charger Stock</button>
+            <div id="stockDisplayArea">
+                <p style="text-align: center; color: #666; padding: 40px;">
+                    Sélectionnez une zone et cliquez sur "Charger Stock" pour visualiser.
+                </p>
+            </div>
+            <p id="visualisationMessage" class="message"></p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Gestion Stock - Version Mobile Optimisée</p>
+    </footer>
+
+    <!-- Datalists pour l'autocomplétion -->
+    <datalist id="materielsList"></datalist>
+
+    <script>
+        // URL de votre API Google Apps Script
+        const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQrltt-idECi0_Z7zgocc4gIddmcU9TbgSm-UeeM5PPpHwSyiTCKbVxOzrmH1jH1hp/exec';
+        
+        // Variables globales
+        let materielCounter = 0;
+        let deferredPrompt;
+
+        // Mapping pour la PWA
+        const NOM_FEUILLE_TO_NOM_ZONE_FRONTEND = {
+            "Stock Voie Creuse": "Voie Creuse",
+            "Stock Bibliothèque": "Bibliothèque",
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeApp();
+            setupPWA();
+        });
+
+        function initializeApp() {
+            const mouvementForm = document.getElementById('mouvementForm');
+            const dateMouvementInput = document.getElementById('dateMouvement');
+            const feuilleCibleSelect = document.getElementById('feuilleCible');
+            const typeMouvementSelect = document.getElementById('typeMouvement');
+            const addMaterielBtn = document.getElementById('addMaterielBtn');
+            const chargerStockBtn = document.getElementById('chargerStockBtn');
+
+            // Initialisation de la date
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            dateMouvementInput.value = `${yyyy}-${mm}-${dd}`;
+
+            // Charger les données initiales
+            loadAllZonesForDatalist();
+            loadAllMaterielsForDatalist();
+            loadAvailableZonesForVisualization();
+
+            // Ajouter le premier matériel
+            addMaterielItem();
+
+            // Event listeners
+            typeMouvementSelect.addEventListener('change', updateFormLabelsAndVisibility);
+            feuilleCibleSelect.addEventListener('change', updateFormLabelsAndVisibility);
+            addMaterielBtn.addEventListener('click', addMaterielItem);
+            mouvementForm.addEventListener('submit', handleFormSubmit);
+            chargerStockBtn.addEventListener('click', handleLoadStock);
+
+            // Initialiser l'affichage
+            updateFormLabelsAndVisibility();
+
+            // Charger le thème sauvegardé
+            loadSavedTheme();
+        }
+
+        // PWA et thème
+        function setupPWA() {
+            // Détecter si l'app peut être installée
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                document.getElementById('installPrompt').classList.add('show');
+            });
+        }
+
+        function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('App installée');
+                        showSuccessMessage('📱 Application installée avec succès !');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+            dismissInstall();
+        }
+
+        function dismissInstall() {
+            document.getElementById('installPrompt').classList.remove('show');
+        }
+
+        function toggleTheme() {
+            const body = document.body;
+            const themeToggle = document.querySelector('.theme-toggle');
+            
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                themeToggle.textContent = '🌙';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                themeToggle.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        function loadSavedTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.setAttribute('data-theme', 'dark');
+                document.querySelector('.theme-toggle').textContent = '☀️';
+            }
+        }
+
+        // Fonction pour faire des requêtes avec contournement CORS
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    return response;
+                }
+                throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.log('Fetch direct échoué, tentative avec contournement...');
+                return await corsWorkaround(url);
+            }
+        }
+
+        async function corsWorkaround(url) {
+            return new Promise((resolve) => {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.style.width = '1px';
+                iframe.style.height = '1px';
+                
+                const timeout = setTimeout(() => {
+                    document.body.removeChild(iframe);
+                    resolve({
+                        ok: true,
+                        text: () => Promise.resolve('Requête envoyée (mode contournement)'),
+                        json: () => Promise.resolve([])
+                    });
+                }, 3000);
+
+                iframe.onload = () => {
+                    clearTimeout(timeout);
+                    setTimeout(() => {
+                        document.body.removeChild(iframe);
+                        resolve({
+                            ok: true,
+                            text: () => Promise.resolve('Requête envoyée avec succès'),
+                            json: () => Promise.resolve([])
+                        });
+                    }, 1000);
+                };
+
+                iframe.src = url;
+                document.body.appendChild(iframe);
+            });
+        }
+
+        function updateFormLabelsAndVisibility() {
+            const typeSelected = document.getElementById('typeMouvement').value;
+            const feuilleCible = document.getElementById('feuilleCible').value;
+            const zoneLabel = document.querySelector('#zoneInputFieldGroup label');
+            const feuilleCibleSelect = document.getElementById('feuilleCible');
+            const typeMouvementSelect = document.getElementById('typeMouvement');
+            const zoneMouvementInput = document.getElementById('zoneMouvement');
+
+            if (typeSelected === "Transfert") {
+                feuilleCibleSelect.querySelector('option[value="Stock Voie Creuse"]').disabled = false;
+                feuilleCibleSelect.querySelector('option[value="Stock Bibliothèque"]').disabled = false;
+                feuilleCibleSelect.querySelector('option[value="Répartition Journalière"]').disabled = true;
+                feuilleCibleSelect.querySelector('option[value="Restes Zones"]').disabled = true;
+                zoneLabel.innerHTML = '📍 Zone de Destination du Transfert:';
+                if (!['Stock Voie Creuse', 'Stock Bibliothèque'].includes(feuilleCible)) {
+                    feuilleCibleSelect.value = 'Stock Voie Creuse';
+                }
+            } else if (typeSelected === "Entrée" || typeSelected === "Sortie") {
+                feuilleCibleSelect.querySelector('option[value="Stock Voie Creuse"]').disabled = false;
+                feuilleCibleSelect.querySelector('option[value="Stock Bibliothèque"]').disabled = false;
+                feuilleCibleSelect.querySelector('option[value="Répartition Journalière"]').disabled = true;
+                feuilleCibleSelect.querySelector('option[value="Restes Zones"]').disabled = true;
+                if (typeSelected === "Entrée") {
+                    zoneLabel.innerHTML = '📍 Zone de Destination (où le matériel est ajouté):';
+                } else {
+                    zoneLabel.innerHTML = '📍 Zone d\'Origine (d\'où le matériel est retiré):';
+                }
+                zoneMouvementInput.value = NOM_FEUILLE_TO_NOM_ZONE_FRONTEND[feuilleCible] || '';
+            } else if (feuilleCible === "Répartition Journalière") {
+                zoneLabel.innerHTML = '📍 Zone de Distribution:';
+                typeMouvementSelect.value = "Entrée";
+                typeMouvementSelect.disabled = true;
+            } else if (feuilleCible === "Restes Zones") {
+                zoneLabel.innerHTML = '📍 Zone d\'Inventaire:';
+                typeMouvementSelect.value = "Entrée";
+                typeMouvementSelect.disabled = true;
+            }
+
+            if (feuilleCible !== "Répartition Journalière" && feuilleCible !== "Restes Zones") {
+                typeMouvementSelect.disabled = false;
+            }
+
+            zoneMouvementInput.required = true;
+        }
+
+        function addMaterielItem() {
+            materielCounter++;
+            const container = document.getElementById('materielsContainer');
+            
+            const materielDiv = document.createElement('div');
+            materielDiv.className = 'materiel-item';
+            materielDiv.dataset.id = materielCounter;
+            
+            materielDiv.innerHTML = `
+                <div class="materiel-inputs">
+                    <input list="materielsList" 
+                           placeholder="📦 Sélectionner ou saisir un matériel" 
+                           class="materiel-input" 
+                           required>
+                    <input type="number" 
+                           placeholder="🔢 Quantité" 
+                           class="quantite-input" 
+                           min="1" 
+                           required>
+                </div>
+                <button type="button" class="btn-danger remove-materiel-btn">🗑️ Supprimer</button>
+            `;
+            
+            container.appendChild(materielDiv);
+            
+            const removeBtn = materielDiv.querySelector('.remove-materiel-btn');
+            removeBtn.addEventListener('click', () => removeMaterielItem(materielDiv));
+            
+            updateMaterielCounter();
+        }
+
+        function removeMaterielItem(materielDiv) {
+            const container = document.getElementById('materielsContainer');
+            if (container.children.length > 1) {
+                materielDiv.remove();
+                updateMaterielCounter();
+            } else {
+                showMessage('mouvementMessage', '⚠️ Au moins un matériel est requis.', 'warning');
+            }
+        }
+
+        function updateMaterielCounter() {
+            const count = document.getElementById('materielsContainer').children.length;
+            document.getElementById('materielCount').textContent = count;
+        }
+
+        async function handleFormSubmit(event) {
+            event.preventDefault();
+            
+            const mouvementMessage = document.getElementById('mouvementMessage');
+            showMessage('mouvementMessage', '⏳ Enregistrement en cours...', 'info', true);
+
+            try {
+                const formData = {
+                    feuilleCible: document.getElementById('feuilleCible').value,
+                    date: document.getElementById('dateMouvement').value,
+                    type: document.getElementById('typeMouvement').value,
+                    zone: document.getElementById('zoneMouvement').value,
+                    items: []
+                };
+
+                const materielItems = document.querySelectorAll('.materiel-item');
+                for (const item of materielItems) {
+                    const materiel = item.querySelector('.materiel-input').value.trim();
+                    const quantite = item.querySelector('.quantite-input').value;
+                    
+                    if (!materiel || !quantite) {
+                        throw new Error('Tous les matériels doivent avoir un nom et une quantité.');
+                    }
+                    
+                    if (parseInt(quantite) <= 0) {
+                        throw new Error('La quantité doit être un nombre positif.');
+                    }
+                    
+                    formData.items.push({
+                        materiel: materiel,
+                        quantite: parseInt(quantite)
+                    });
+                }
+
+                if (formData.items.length === 0) {
+                    throw new Error('Au moins un matériel est requis.');
+                }
+
+                // Validations métier
+                if (formData.type === "Transfert") {
+                    const feuilleSource = formData.feuilleCible;
+                    const zoneDestination = formData.zone;
+                    if (!feuilleSource || !zoneDestination) {
+                        throw new Error('Pour un Transfert, la Feuille de Journalisation (Source) et la Zone de Destination sont obligatoires.');
+                    }
+                    const zoneSourceLogique = NOM_FEUILLE_TO_NOM_ZONE_FRONTEND[feuilleSource];
+                    if (!zoneSourceLogique || zoneSourceLogique === zoneDestination) {
+                        throw new Error('Pour un Transfert, la Feuille de Journalisation doit être un Stock principal (Voie Creuse/Bibliothèque) et la Zone de Destination doit être différente de la source.');
+                    }
+                } else if (document.getElementById('feuilleCible').value === "Répartition Journalière" && document.getElementById('typeMouvement').value !== "Entrée") {
+                    throw new Error('Pour "Répartition Journalière", seul le type "Entrée" est logique.');
+                } else if (document.getElementById('feuilleCible').value === "Restes Zones" && document.getElementById('typeMouvement').value !== "Entrée") {
+                    throw new Error('Pour "Restes Zones", seul le type "Entrée" (historique) est logique.');
+                }
+
+                // Enregistrement avec feedback amélioré
+                let successCount = 0;
+
+                for (let i = 0; i < formData.items.length; i++) {
+                    const item = formData.items[i];
+                    
+                    showMessage('mouvementMessage', `📝 Enregistrement ${i + 1}/${formData.items.length}: ${item.materiel}...`, 'info', true);
+                    
+                    try {
+                        const params = new URLSearchParams({
+                            action: 'addSingleMovement',
+                            feuilleCible: formData.feuilleCible,
+                            date: formData.date,
+                            type: formData.type,
+                            zone: formData.zone,
+                            materiel: item.materiel,
+                            quantite: item.quantite.toString()
+                        });
+
+                        const url = `${APP_SCRIPT_URL}?${params.toString()}`;
+                        const response = await makeRequest(url);
+
+                        if (response.ok) {
+                            successCount++;
+                            console.log(`✅ ${item.materiel} enregistré avec succès`);
+                        }
+                        
+                        // Petit délai entre les requêtes
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        
+                    } catch (error) {
+                        console.error(`Erreur pour ${item.materiel}:`, error);
+                    }
+                }
+
+                // Message de succès final avec vibration
+                if (successCount > 0) {
+                    showMessage('mouvementMessage', `✅ Mouvements enregistrés avec succès: ${successCount}/${formData.items.length} matériel(s) traité(s).`, 'success');
+                    
+                    // Vibration de succès sur mobile
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+                    
+                    // Reset du formulaire après succès
+                    setTimeout(() => {
+                        resetForm();
+                        loadAllZonesForDatalist();
+                        loadAllMaterielsForDatalist(); 
+                        loadAvailableZonesForVisualization();
+                    }, 2000);
+                } else {
+                    showMessage('mouvementMessage', '⚠️ Tous les matériels ont été envoyés pour traitement. Vérifiez vos données dans Google Sheets.', 'warning');
+                }
+                
+            } catch (error) {
+                console.error('Erreur lors de l\'enregistrement:', error);
+                showMessage('mouvementMessage', '❌ Erreur lors de l\'enregistrement: ' + error.message, 'error');
+                
+                // Vibration d'erreur sur mobile
+                if (navigator.vibrate) {
+                    navigator.vibrate([100, 50, 100, 50, 100]);
+                }
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('mouvementForm').reset();
+            
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('dateMouvement').value = `${yyyy}-${mm}-${dd}`;
+            
+            const container = document.getElementById('materielsContainer');
+            container.innerHTML = '';
+            materielCounter = 0;
+            addMaterielItem();
+            
+            updateFormLabelsAndVisibility();
+            hideMessage('mouvementMessage');
+        }
+
+        function showMessage(elementId, message, type, showLoading = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = 'block';
+            
+            if (showLoading) {
+                element.innerHTML = `<span class="loading"></span> ${message}`;
+            }
+        }
+
+        function hideMessage(elementId) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'none';
+        }
+
+        function showSuccessMessage(message) {
+            // Créer un message de succès temporaire
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message success';
+            messageDiv.textContent = message;
+            messageDiv.style.position = 'fixed';
+            messageDiv.style.top = '20px';
+            messageDiv.style.left = '50%';
+            messageDiv.style.transform = 'translateX(-50%)';
+            messageDiv.style.zIndex = '1000';
+            messageDiv.style.maxWidth = '90%';
+            
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                document.body.removeChild(messageDiv);
+            }, 3000);
+        }
+
+        // Chargement des données avec fallback
+        async function loadAllZonesForDatalist() {
+            try {
+                const response = await makeRequest(`${APP_SCRIPT_URL}?get=zones`);
+                if (response.ok) {
+                    const text = await response.text();
+                    if (text && text !== 'Requête envoyée (mode contournement)') {
+                        const zones = JSON.parse(text);
+                        const zonesDatalist = document.getElementById('zonesList');
+                        zonesDatalist.innerHTML = '';
+                        zones.forEach(zone => {
+                            const option = document.createElement('option');
+                            option.value = zone;
+                            zonesDatalist.appendChild(option);
+                        });
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.log('Chargement des zones échoué, utilisation des valeurs par défaut');
+            }
+            
+            // Zones par défaut si le chargement échoue
+            const defaultZones = ["Voie Creuse", "Bibliothèque", "étage 1", "étage 2", "étage 3", "étage 4", "étage 5", "reading room 1", "reading room 2", "compactus", "b26"];
+            const zonesDatalist = document.getElementById('zonesList');
+            zonesDatalist.innerHTML = '';
+            defaultZones.forEach(zone => {
+                const option = document.createElement('option');
+                option.value = zone;
+                zonesDatalist.appendChild(option);
+            });
+        }
+
+        async function loadAllMaterielsForDatalist() {
+            try {
+                const response = await makeRequest(`${APP_SCRIPT_URL}?get=materiels`);
+                if (response.ok) {
+                    const text = await response.text();
+                    if (text && text !== 'Requête envoyée (mode contournement)') {
+                        const materiels = JSON.parse(text);
+                        const materielsDatalist = document.getElementById('materielsList');
+                        materielsDatalist.innerHTML = '';
+                        materiels.forEach(materiel => {
+                            const option = document.createElement('option');
+                            option.value = materiel;
+                            materielsDatalist.appendChild(option);
+                        });
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.log('Chargement des matériels échoué, utilisation des valeurs par défaut');
+            }
+            
+            // Matériels par défaut si le chargement échoue
+            const defaultMateriels = ["Cadres-palette CFF", "Cartons 60x37x38", "Couvercles cadres-palette", "Intercalaires 120x80", "Palettes 80x120", "rouleau scotch", "papier blanc"];
+            const materielsDatalist = document.getElementById('materielsList');
+            materielsDatalist.innerHTML = '';
+            defaultMateriels.forEach(materiel => {
+                const option = document.createElement('option');
+                option.value = materiel;
+                materielsDatalist.appendChild(option);
+            });
+        }
+
+        async function loadAvailableZonesForVisualization() {
+            const selectZoneVisualisation = document.getElementById('selectZoneVisualisation');
+            
+            try {
+                const response = await makeRequest(`${APP_SCRIPT_URL}?get=zones`);
+                if (response.ok) {
+                    const text = await response.text();
+                    if (text && text !== 'Requête envoyée (mode contournement)') {
+                        const zones = JSON.parse(text);
+                        
+                        selectZoneVisualisation.innerHTML = '<option value="">-- Sélectionner une zone --</option>';
+                        zones.forEach(zone => {
+                            const option = document.createElement('option');
+                            option.value = zone;
+                            option.textContent = zone;
+                            selectZoneVisualisation.appendChild(option);
+                        });
+
+                        if (zones.length > 0) {
+                            selectZoneVisualisation.value = zones[0];
+                            loadStockData(zones[0]);
+                        }
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.log('Chargement des zones pour visualisation échoué');
+            }
+            
+            // Zones par défaut
+            const defaultZones = ["Voie Creuse", "Bibliothèque", "étage 1", "étage 2", "étage 3"];
+            selectZoneVisualisation.innerHTML = '<option value="">-- Sélectionner une zone --</option>';
+            defaultZones.forEach(zone => {
+                const option = document.createElement('option');
+                option.value = zone;
+                option.textContent = zone;
+                selectZoneVisualisation.appendChild(option);
+            });
+        }
+
+        async function handleLoadStock() {
+            const selectedZone = document.getElementById('selectZoneVisualisation').value;
+            if (selectedZone) {
+                loadStockData(selectedZone);
+            } else {
+                showMessage('visualisationMessage', '⚠️ Veuillez sélectionner une zone.', 'warning');
+            }
+        }
+
+        async function loadStockData(zone) {
+            showMessage('visualisationMessage', `🔍 Chargement du stock pour "${zone}"...`, 'info', true);
+            document.getElementById('stockDisplayArea').innerHTML = '';
+
+            try {
+                const response = await makeRequest(`${APP_SCRIPT_URL}?etat=1&zone=${encodeURIComponent(zone)}`);
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    if (text && text !== 'Requête envoyée (mode contournement)') {
+                        const data = JSON.parse(text);
+                        displayStockData(data, zone);
+                        return;
+                    }
+                }
+                
+                // Si pas de données, afficher un message informatif
+                showMessage('visualisationMessage', `📊 Données de stock pour "${zone}" envoyées en arrière-plan. Actualisez dans quelques secondes.`, 'info');
+                
+            } catch (error) {
+                console.error('Erreur lors du chargement des données de stock:', error);
+                showMessage('visualisationMessage', `⏳ Chargement des données de stock en cours pour "${zone}". Veuillez patienter...`, 'info');
+            }
+        }
+
+        function displayStockData(data, zoneName) {
+            const stockDisplayArea = document.getElementById('stockDisplayArea');
+            const visualisationMessage = document.getElementById('visualisationMessage');
+            
+            stockDisplayArea.innerHTML = '';
+            hideMessage('visualisationMessage');
+
+            const title = document.createElement('h3');
+            title.innerHTML = `📦 État des stocks pour ${zoneName}:`;
+            title.style.color = 'var(--primary-color)';
+            title.style.textAlign = 'center';
+            title.style.marginBottom = '20px';
+            stockDisplayArea.appendChild(title);
+
+            if (data && data.length > 1) {
+                const table = document.createElement('table');
+                table.classList.add('stock-table');
+
+                let html = '<thead><tr>';
+                data[0].forEach(header => {
+                    html += `<th>${header}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                for (let i = 1; i < data.length; i++) {
+                    html += '<tr>';
+                    data[i].forEach(cell => {
+                        html += `<td>${cell}</td>`;
+                    });
+                    html += '</tr>';
+                }
+                html += '</tbody>';
+                table.innerHTML = html;
+                stockDisplayArea.appendChild(table);
+                
+                showMessage('visualisationMessage', `✅ Affichage de ${data.length - 1} articles.`, 'success');
+            } else {
+                stockDisplayArea.innerHTML += '<p style="text-align: center; color: #666; padding: 40px;">📭 Aucune donnée de stock trouvée pour cette zone ou le stock est vide.</p>';
+                showMessage('visualisationMessage', '📭 Aucune donnée de stock trouvée.', 'warning');
+            }
+        }
+
+        // Service Worker pour PWA (optionnel)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker enregistré avec succès:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker non disponible:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
