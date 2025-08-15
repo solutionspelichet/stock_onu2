@@ -4,7 +4,7 @@
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#FF9800", /* Orange */
+  "theme_color": "#FF9800", 
   "description": "Application de gestion de stock de matériel pour l'ONU.",
   "icons": [
     {
