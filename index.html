@@ -7,300 +7,105 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <meta name="theme-color" content="#FF9800" />
-  <style>
-    :root { --brand: #FF9800; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #fafafa; color: #222; }
-    header { background: var(--brand); color: #fff; padding: 12px 16px; }
-    header h1 { margin: 0; font-size: 20px; }
-    main { padding: 16px; display: grid; gap: 20px; max-width: 1100px; margin: 0 auto; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.06); padding: 16px; }
-    .row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-    .row-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
-    .row-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-    label { font-size: 12px; color: #555; display: block; margin-bottom: 4px; }
-    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 10px; background: #fff; }
-    button { background: var(--brand); color: #fff; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
-    button.secondary { background: #444; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
-    th { background: #fafafa; }
-    .muted { color: #666; font-size: 13px; }
-    .ok { color: #0a7a2f; }
-    .error { color: #b00020; }
-    .toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
-    .pill { background:#f3f3f3; border-radius:999px; padding:2px 10px; font-size:12px; }
-  </style>
 </head>
 <body>
 <header>
-  <h1>Gestion Stock ONU – Réapprovisionnement J+1</h1>
+  <h1>Gestion Stock ONU</h1>
+  <nav class="tabs">
+    <button class="tab-button active" data-tab="tab-reappro">Réappro J+1</button>
+    <button class="tab-button" data-tab="tab-legacy">Fonctionnalités précédentes</button>
+  </nav>
 </header>
 
 <main>
-  <!-- Ping / Statut API -->
-  <section class="card">
-    <h2>Statut API</h2>
-    <div class="toolbar">
-      <button id="btnPing">Tester la connexion</button>
-      <span id="pingStatus" class="muted"></span>
-      <span class="pill">Endpoint: https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec</span>
-    </div>
+  <!-- Onglet: Réappro J+1 -->
+  <section id="tab-reappro" class="tab-panel">
+    <section class="card">
+      <h2>Statut API</h2>
+      <div class="toolbar">
+        <button id="btnPing">Tester la connexion</button>
+        <span id="pingStatus" class="muted"></span>
+        <span class="pill">Endpoint: https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Saisie Besoins J+1</h2>
+      <div class="row">
+        <div><label for="besoinDate">Date de livraison</label><input type="date" id="besoinDate" /></div>
+        <div><label for="besoinEquipe">Équipe</label><select id="besoinEquipe"></select></div>
+        <div><label for="besoinMateriel">Matériel</label><select id="besoinMateriel"></select></div>
+        <div><label for="besoinCible">Cible (stock désiré demain)</label><input type="number" id="besoinCible" min="0" step="1" /></div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div><label for="besoinComment">Commentaire</label><input type="text" id="besoinComment" placeholder="Optionnel" /></div>
+        <div style="display:flex; align-items:end; gap:10px;"><button id="btnAddBesoin">Ajouter la ligne</button><span id="besoinMsg" class="muted"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Clôture J (Snapshot des restes)</h2>
+      <div class="row-3">
+        <div><label for="snapshotDate">Date à figer</label><input type="date" id="snapshotDate" /></div>
+        <div style="display:flex; align-items:end;"><button id="btnSnapshot">Figer les restes</button></div>
+        <div style="display:flex; align-items:end;"><span id="snapshotMsg" class="muted"></span></div>
+      </div>
+      <p class="muted">Copie l'état courant des stocks dans <b>Restes Zones</b> à la date choisie.</p>
+    </section>
+
+    <section class="card">
+      <h2>Calcul du plan J+1</h2>
+      <div class="row-3">
+        <div><label for="planDate">Date de livraison</label><input type="date" id="planDate" /></div>
+        <div style="display:flex; align-items:end;"><button id="btnCalculerPlan">Calculer le plan</button></div>
+        <div style="display:flex; align-items:end;"><button id="btnGenererMouvements" class="secondary" disabled>Générer VC → Bibliothèque</button></div>
+      </div>
+      <h3 style="margin-top:14px;">Agrégat – Prélèvements Voie Creuse</h3>
+      <div id="aggContainer" class="muted">Aucun calcul.</div>
+      <h3 style="margin-top:14px;">Détail par équipe</h3>
+      <div id="detailContainer" class="muted">Aucun calcul.</div>
+    </section>
   </section>
 
-  <!-- Saisie des besoins J+1 -->
-  <section class="card">
-    <h2>Saisie Besoins J+1</h2>
-    <div class="row">
-      <div>
-        <label for="besoinDate">Date de livraison</label>
-        <input type="date" id="besoinDate" />
+  <!-- Onglet: Fonctionnalités précédentes -->
+  <section id="tab-legacy" class="tab-panel hidden">
+    <section class="card">
+      <h2>Mouvements (Entrée / Sortie / Transfert)</h2>
+      <div class="row">
+        <div><label>Date</label><input type="date" id="legacyDate" /></div>
+        <div><label>Type</label>
+          <select id="legacyType"><option>Entrée</option><option>Sortie</option><option>Transfert</option></select>
+        </div>
+        <div><label>Feuille cible</label>
+          <select id="legacyFeuille">
+            <option>Stock Voie Creuse</option>
+            <option>Stock Bibliothèque</option>
+            <option>Répartition Journalière</option>
+            <option>Restes Zones</option>
+          </select>
+        </div>
+        <div><label>Zone</label><select id="legacyZone"></select></div>
       </div>
-      <div>
-        <label for="besoinEquipe">Équipe</label>
-        <select id="besoinEquipe"></select>
+      <div class="row">
+        <div><label>Matériel</label><select id="legacyMateriel"></select></div>
+        <div><label>Quantité</label><input type="number" id="legacyQuantite" min="1" step="1" /></div>
+        <div style="display:flex; align-items:end;"><button id="btnLegacyAjouter">Enregistrer mouvement</button></div>
+        <div style="display:flex; align-items:end;"><span id="legacyMsg" class="muted"></span></div>
       </div>
-      <div>
-        <label for="besoinMateriel">Matériel</label>
-        <select id="besoinMateriel"></select>
-      </div>
-      <div>
-        <label for="besoinCible">Cible (stock désiré demain)</label>
-        <input type="number" id="besoinCible" min="0" step="1" />
-      </div>
-    </div>
-    <div class="row-2" style="margin-top:10px;">
-      <div>
-        <label for="besoinComment">Commentaire</label>
-        <input type="text" id="besoinComment" placeholder="Optionnel" />
-      </div>
-      <div style="display:flex; align-items:end; gap:10px;">
-        <button id="btnAddBesoin">Ajouter la ligne</button>
-        <span id="besoinMsg" class="muted"></span>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Snapshot des restes de la journée -->
-  <section class="card">
-    <h2>Clôture J (Snapshot des restes)</h2>
-    <div class="row-3">
-      <div>
-        <label for="snapshotDate">Date à figer dans "Restes Zones"</label>
-        <input type="date" id="snapshotDate" />
+    <section class="card">
+      <h2>État des stocks par zone</h2>
+      <div class="row-3">
+        <div><label>Zone</label><select id="etatZone"></select></div>
+        <div style="display:flex; align-items:end;"><button id="btnChargerEtat">Charger l'état</button></div>
+        <div style="display:flex; align-items:end;"><span class="muted">Lecture via l'API existante.</span></div>
       </div>
-      <div style="display:flex; align-items:end;">
-        <button id="btnSnapshot">Figer les restes (copie de l'état actuel)</button>
-      </div>
-      <div style="display:flex; align-items:end;">
-        <span id="snapshotMsg" class="muted"></span>
-      </div>
-    </div>
-    <p class="muted">Cette opération copie l'état courant des stocks dans <strong>Restes Zones</strong> avec la date choisie.</p>
-  </section>
-
-  <!-- Calcul du plan J+1 -->
-  <section class="card">
-    <h2>Calcul du plan J+1</h2>
-    <div class="row-3">
-      <div>
-        <label for="planDate">Date de livraison</label>
-        <input type="date" id="planDate" />
-      </div>
-      <div style="display:flex; align-items:end;">
-        <button id="btnCalculerPlan">Calculer le plan</button>
-      </div>
-      <div style="display:flex; align-items:end;">
-        <button id="btnGenererMouvements" class="secondary" disabled>Générer mouvements VC → Bibliothèque</button>
-      </div>
-    </div>
-
-    <h3 style="margin-top:14px;">Agrégat – Prélèvements Voie Creuse</h3>
-    <div id="aggContainer" class="muted">Aucun calcul.</div>
-
-    <h3 style="margin-top:14px;">Détail par équipe</h3>
-    <div id="detailContainer" class="muted">Aucun calcul.</div>
+      <div id="etatTable" class="muted" style="margin-top:8px;">Aucun résultat.</div>
+    </section>
   </section>
 </main>
 
-<script>
-  const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
-
-  async function apiGet(params) {
-    const url = APP_SCRIPT_URL + "?" + new URLSearchParams(params).toString();
-    const res = await fetch(url, { method: "GET" });
-    const ct = res.headers.get("content-type")||"";
-    if (ct.includes("application/json")) return res.json();
-    return res.text();
-  }
-
-  function setToday(inputId) {
-    const el = document.getElementById(inputId);
-    const today = new Date().toISOString().slice(0,10);
-    el.value = today;
-  }
-
-  function toTable(headers, rows) {
-    const thead = "<thead><tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr></thead>";
-    const tbody = "<tbody>" + rows.map(r=>"<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>").join("") + "</tbody>";
-    return `<table>${thead+tbody}</table>`;
-  }
-
-  async function initLists() {
-    const eqSelect = document.getElementById("besoinEquipe");
-    eqSelect.innerHTML = "";
-    const equipes = await apiGet({ get: "equipes" });
-    (equipes||[]).forEach(e => {
-      const opt = document.createElement("option");
-      opt.value = e; opt.textContent = e;
-      eqSelect.appendChild(opt);
-    });
-
-    const matSelect = document.getElementById("besoinMateriel");
-    matSelect.innerHTML = "";
-    const materiels = await apiGet({ get: "materiels" });
-    (materiels||[]).forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m; opt.textContent = m;
-      matSelect.appendChild(opt);
-    });
-  }
-
-  document.getElementById("btnPing").addEventListener("click", async () => {
-    const status = document.getElementById("pingStatus");
-    status.textContent = "Test en cours...";
-    try {
-      const res = await apiGet({ test: "1" });
-      if (res && res.status === "OK") {
-        status.textContent = "Connecté ✔";
-        status.className = "ok";
-      } else {
-        status.textContent = "Réponse inattendue";
-        status.className = "error";
-      }
-    } catch (e) {
-      status.textContent = "Erreur de connexion";
-      status.className = "error";
-    }
-  });
-
-  document.getElementById("btnAddBesoin").addEventListener("click", async () => {
-    const d = document.getElementById("besoinDate").value;
-    const equipe = document.getElementById("besoinEquipe").value;
-    const mat = document.getElementById("besoinMateriel").value;
-    const cible = document.getElementById("besoinCible").value;
-    const comment = document.getElementById("besoinComment").value;
-    const msg = document.getElementById("besoinMsg");
-    msg.className = "muted";
-    msg.textContent = "Ajout en cours...";
-
-    if (!d || !equipe || !mat || !cible) {
-      msg.textContent = "Veuillez renseigner date, équipe, matériel et cible.";
-      msg.className = "error";
-      return;
-    }
-
-    try {
-      const res = await apiGet({
-        action: "addBesoins",
-        date: d,
-        equipe: equipe,
-        materiel: mat,
-        cible: cible,
-        commentaire: comment
-      });
-      msg.textContent = (typeof res === "string" ? res : "Ajout effectué");
-      msg.className = "ok";
-      document.getElementById("besoinCible").value = "";
-      document.getElementById("besoinComment").value = "";
-    } catch (e) {
-      msg.textContent = "Erreur: " + e.message;
-      msg.className = "error";
-    }
-  });
-
-  document.getElementById("btnSnapshot").addEventListener("click", async () => {
-    const d = document.getElementById("snapshotDate").value;
-    const msg = document.getElementById("snapshotMsg");
-    msg.textContent = "Snapshot en cours...";
-    msg.className = "muted";
-    if (!d) { msg.textContent = "Choisissez une date."; msg.className = "error"; return; }
-    try {
-      const res = await apiGet({ action: "snapshotRestes", date: d });
-      msg.textContent = (typeof res === "string" ? res : "Snapshot effectué");
-      msg.className = "ok";
-    } catch (e) {
-      msg.textContent = "Erreur: " + e.message;
-      msg.className = "error";
-    }
-  });
-
-  document.getElementById("btnCalculerPlan").addEventListener("click", async () => {
-    const d = document.getElementById("planDate").value;
-    const aggDiv = document.getElementById("aggContainer");
-    const detDiv = document.getElementById("detailContainer");
-    const btnGen = document.getElementById("btnGenererMouvements");
-
-    if (!d) {
-      aggDiv.textContent = "Veuillez sélectionner une date.";
-      detDiv.textContent = "";
-      btnGen.disabled = true;
-      return;
-    }
-
-    aggDiv.textContent = "Calcul en cours...";
-    detDiv.textContent = "";
-    btnGen.disabled = true;
-
-    try {
-      const res = await apiGet({ plan: "reappro", date: d });
-      if (res && res.agregat) {
-        const aggRows = res.agregat;
-        if (aggRows.length) {
-          const headers = ["Date","Matériel","Quantité À Prélever"];
-          aggDiv.innerHTML = toTable(headers, aggRows);
-          btnGen.disabled = false;
-        } else {
-          aggDiv.textContent = "Aucun besoin agrégé.";
-        }
-      } else {
-        aggDiv.textContent = "Aucune donnée.";
-      }
-
-      if (res && res.details) {
-        const headersD = ["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"];
-        detDiv.innerHTML = toTable(headersD, res.details);
-      } else {
-        detDiv.textContent = "";
-      }
-    } catch (e) {
-      aggDiv.textContent = "Erreur: " + e.message;
-      detDiv.textContent = "";
-    }
-  });
-
-  document.getElementById("btnGenererMouvements").addEventListener("click", async () => {
-    const d = document.getElementById("planDate").value;
-    const aggDiv = document.getElementById("aggContainer");
-    if (!d) return;
-    aggDiv.textContent = "Génération des mouvements en cours...";
-
-    try {
-      const res = await apiGet({ action: "genererReappro", date: d });
-      const msg = (typeof res === "string" ? res : JSON.stringify(res));
-      aggDiv.innerHTML = `<p class="ok">${msg}</p>`;
-    } catch (e) {
-      aggDiv.innerHTML = `<p class="error">Erreur: ${e.message}</p>`;
-    }
-  });
-
-  setToday("besoinDate");
-  setToday("snapshotDate");
-  setToday("planDate");
-  initLists();
-
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js');
-  }
-</script>
+<script src="script.js"></script>
 </body>
 </html>
