@@ -10,6 +10,8 @@
     --card-background: #fff;
     --text-color: #333;
     --border-color: #ddd;
+    --brand: #FF9800; 
+
 }
 
 [data-theme="dark"] {
