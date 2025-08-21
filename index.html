@@ -70,7 +70,7 @@
   <!-- Onglet: Fonctionnalités précédentes -->
   <section id="tab-legacy" class="tab-panel hidden">
     <section class="card">
-      <h2>Mouvements (Entrée / Sortie / Transfert)</h2>
+      <h2>Mouvement multi-matériels (Entrée / Sortie / Transfert)</h2>
       <div class="row">
         <div><label>Date</label><input type="date" id="legacyDate" /></div>
         <div><label>Type</label>
@@ -86,12 +86,19 @@
         </div>
         <div><label>Zone</label><select id="legacyZone"></select></div>
       </div>
-      <div class="row">
-        <div><label>Matériel</label><select id="legacyMateriel"></select></div>
-        <div><label>Quantité</label><input type="number" id="legacyQuantite" min="1" step="1" /></div>
-        <div style="display:flex; align-items:end;"><button id="btnLegacyAjouter">Enregistrer mouvement</button></div>
-        <div style="display:flex; align-items:end;"><span id="legacyMsg" class="muted"></span></div>
+
+      <div class="table-wrap">
+        <table id="legacyTable">
+          <thead><tr><th style="width:65%;">Matériel</th><th style="width:25%;">Quantité</th><th style="width:10%;">&nbsp;</th></tr></thead>
+          <tbody id="legacyItems"></tbody>
+        </table>
+        <div class="toolbar" style="margin-top:8px;">
+          <button id="btnLegacyAddLine">+ Ajouter une ligne</button>
+          <button id="btnLegacySave" class="secondary">Enregistrer le mouvement (multi-matériels)</button>
+          <span id="legacyMsg" class="muted"></span>
+        </div>
       </div>
+      <p class="muted">Astuce : utilisez cet écran pour enregistrer en une seule fois plusieurs matériels d'un même mouvement.</p>
     </section>
 
     <section class="card">

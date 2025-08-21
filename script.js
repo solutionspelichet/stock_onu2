@@ -1,4 +1,4 @@
-// Frontend logic + Tabs
+// Frontend logic + Tabs + Multi-matériels (legacy)
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -15,15 +15,27 @@ function toTable(h,rows){const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
   const panels = document.querySelectorAll('.tab-panel');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      buttons.forEach(b=>b.classList.remove('active'));
-      panels.forEach(p=>p.classList.add('hidden'));
-      btn.classList.add('active');
-      const target = document.getElementById(btn.dataset.tab);
-      if (target) target.classList.remove('hidden');
-    });
-  });
+  buttons.forEach(btn => { btn.addEventListener('click', () => { buttons.forEach(b=>b.classList.remove('active')); panels.forEach(p=>p.classList.add('hidden')); btn.classList.add('active'); const target = document.getElementById(btn.dataset.tab); if (target) target.classList.remove('hidden'); }); });
+}
+
+let _matsList = [];
+function buildMatSelect(value=""){
+  const sel = document.createElement('select');
+  _matsList.forEach(m=>{ const o=document.createElement('option'); o.value=o.textContent=m; sel.appendChild(o); });
+  if(value) sel.value=value;
+  return sel;
+}
+
+function addLegacyRow(value="", qty=""){
+  const tbody = document.getElementById('legacyItems');
+  const tr = document.createElement('tr');
+  const tdMat = document.createElement('td'); const tdQty = document.createElement('td'); const tdRm = document.createElement('td');
+  const sel = buildMatSelect(value);
+  const input = document.createElement('input'); input.type='number'; input.min='1'; input.step='1'; input.value = qty;
+  const btn = document.createElement('button'); btn.textContent='Supprimer'; btn.className='remove-btn'; btn.addEventListener('click', ()=> tr.remove());
+  tdMat.appendChild(sel); tdQty.appendChild(input); tdRm.appendChild(btn);
+  tr.appendChild(tdMat); tr.appendChild(tdQty); tr.appendChild(tdRm);
+  tbody.appendChild(tr);
 }
 
 async function initLists() {
@@ -31,15 +43,17 @@ async function initLists() {
   const equipes = await apiGet({ get: "equipes" });
   (equipes||[]).forEach(e=>{const o=document.createElement("option");o.value=o.textContent=e;eqSel&&eqSel.appendChild(o);});
 
-  const mats = await apiGet({ get: "materiels" });
+  _matsList = await apiGet({ get: "materiels" }) || [];
   const matSel1 = document.getElementById("besoinMateriel");
-  const matSel2 = document.getElementById("legacyMateriel");
-  [matSel1,matSel2].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (mats||[]).forEach(m=>{const o=document.createElement("option");o.value=o.textContent=m; sel.appendChild(o);}); });
+  [matSel1].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (_matsList||[]).forEach(m=>{const o=document.createElement("option");o.value=o.textContent=m; sel.appendChild(o);}); });
 
   const zones = await apiGet({ get: "zones" });
   const zoneSel1 = document.getElementById("legacyZone");
   const zoneSel2 = document.getElementById("etatZone");
   [zoneSel1,zoneSel2].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (zones||[]).forEach(z=>{const o=document.createElement("option");o.value=o.textContent=z; sel.appendChild(o);}); });
+
+  const tbody = document.getElementById('legacyItems');
+  if (tbody && !tbody.children.length) addLegacyRow();
 }
 
 // ───────── Events
@@ -49,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
     const s=document.getElementById("pingStatus"); if(s) s.textContent="Test en cours...";
-    try{const r=await apiGet({test:"1"}); if(s){ s.textContent=(r&&r.status==="OK")?"Connecté ✔":"Réponse inattendue"; s.className=(r&&r.status==="OK")?"ok":"error"; }}
+    try{const r=await apiGet({test:"1"}); if(s){ s.textContent=(r&&r.status==="OK")?"Connecté ✔":"Réponse inattendue"; s.className=(r&&r.status==="OK")?"ok":"error"; } }
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
@@ -77,8 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if(!d){a.textContent="Veuillez sélectionner une date."; t.textContent=""; b.disabled=true; return;}
     a.textContent="Calcul en cours..."; t.textContent=""; b.disabled=true;
     try{const r=await apiGet({plan:"reappro", date:d});
-      if(r&&r.agregat){ if(r.agregat.length){a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false;} else {a.textContent="Aucun besoin agrégé.";} }
-      else {a.textContent="Aucune donnée.";}
+      if(r&&r.agregat){ if(r.agregat.length){a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false;} else {a.textContent="Aucun besoin agrégé.";}} else {a.textContent="Aucune donnée.";}
       if(r&&r.details){t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details);} else {t.textContent="";}
     }catch(e){a.textContent="Erreur: "+e.message; t.textContent="";}
   });
@@ -91,24 +104,24 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){a.innerHTML=`<p class="error">Erreur: ${e.message}</p>`;}
   });
 
-  // Legacy: mouvements
-  document.getElementById("btnLegacyAjouter")?.addEventListener("click", async () => {
-    const d=legacyDate.value, type=legacyType.value, feuille=legacyFeuille.value, zone=legacyZone.value, m=legacyMateriel.value, q=legacyQuantite.value;
-    const msg=legacyMsg; msg.textContent="Traitement..."; msg.className="muted";
-    if(!d||!type||!feuille||!m||!q){msg.textContent="Complétez date, type, feuille cible, matériel, quantité."; msg.className="error"; return;}
-    try{const r=await apiGet({ action:'addSingleMovement', date:d, type:type, feuilleCible:feuille, zone:zone, materiel:m, quantite:q });
-      msg.textContent=(typeof r==='string'?r:'OK'); msg.className='ok';
-    }catch(e){msg.textContent='Erreur: '+e.message; msg.className='error';}
-  });
+  // Legacy multi-matériels
+  document.getElementById('btnLegacyAddLine')?.addEventListener('click', ()=> addLegacyRow());
+  document.getElementById('btnLegacySave')?.addEventListener('click', async ()=> {
+    const msg = document.getElementById('legacyMsg'); msg.textContent="Enregistrement..."; msg.className="muted";
+    const d=legacyDate.value, type=legacyType.value, feuille=legacyFeuille.value, zone=legacyZone.value;
+    const rows = Array.from(document.querySelectorAll('#legacyItems tr')).map(tr=>({
+      materiel: tr.querySelector('select')?.value || '',
+      quantite: parseInt(tr.querySelector('input')?.value||'0',10) || 0
+    })).filter(r=>r.materiel && r.quantite>0);
 
-  // Legacy: état par zone
-  document.getElementById("btnChargerEtat")?.addEventListener("click", async () => {
-    const z=etatZone.value; const box=etatTable; box.textContent="Chargement...";
-    try{const r=await apiGet({ etat:'1', zone:z });
-      if(Array.isArray(r) && r.length>1){ box.innerHTML = toTable(r[0], r.slice(1)); }
-      else if (typeof r === 'string') { box.textContent = r; }
-      else { box.textContent = 'Aucune donnée.'; }
-    }catch(e){ box.textContent = 'Erreur: '+e.message; }
+    if(!d||!type||!feuille||rows.length===0){ msg.textContent="Renseignez date, type, feuille et au moins un matériel/quantité."; msg.className='error'; return; }
+
+    try{
+      const payload = encodeURIComponent(JSON.stringify(rows));
+      const r = await apiGet({ action:'addLegacyBatch', date:d, type:type, feuilleCible:feuille, zone:zone, lignes: payload });
+      msg.textContent = (typeof r==='string'? r : 'OK');
+      msg.className='ok';
+    }catch(e){ msg.textContent='Erreur: '+e.message; msg.className='error'; }
   });
 
   setToday("besoinDate"); setToday("snapshotDate"); setToday("planDate"); setToday("legacyDate");
