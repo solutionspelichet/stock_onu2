@@ -15,6 +15,14 @@ function toTable(h,rows){
   const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
   return `<table>${th+tb}</table>`;
 }
+function setTomorrow(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  const d=new Date(); d.setDate(d.getDate()+1);
+  el.value=d.toISOString().slice(0,10);
+}
+// … dans DOMContentLoaded :
+setTomorrow("planDate");
 
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
