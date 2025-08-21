@@ -10,12 +10,22 @@ async function apiGet(params) {
 }
 
 function setToday(id){const el=document.getElementById(id); if(el) el.value=new Date().toISOString().slice(0,10);}
-function toTable(h,rows){const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead>";const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";return `<table>${th+tb}</table>`;}
+function toTable(h,rows){
+  const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead>";
+  const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
+  return `<table>${th+tb}</table>`;
+}
 
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
   const panels = document.querySelectorAll('.tab-panel');
-  buttons.forEach(btn => { btn.addEventListener('click', () => { buttons.forEach(b=>b.classList.remove('active')); panels.forEach(p=>p.classList.add('hidden')); btn.classList.add('active'); const target = document.getElementById(btn.dataset.tab); if (target) target.classList.remove('hidden'); }); });
+  buttons.forEach(btn => { btn.addEventListener('click', () => {
+    buttons.forEach(b=>b.classList.remove('active'));
+    panels.forEach(p=>p.classList.add('hidden'));
+    btn.classList.add('active');
+    const target = document.getElementById(btn.dataset.tab);
+    if (target) target.classList.remove('hidden');
+  }); });
 }
 
 let _matsList = [];
@@ -52,6 +62,7 @@ async function initLists() {
   const zoneSel2 = document.getElementById("etatZone");
   [zoneSel1,zoneSel2].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (zones||[]).forEach(z=>{const o=document.createElement("option");o.value=o.textContent=z; sel.appendChild(o);}); });
 
+  // Première ligne par défaut pour le tableau multi-matériels
   const tbody = document.getElementById('legacyItems');
   if (tbody && !tbody.children.length) addLegacyRow();
 }
@@ -67,17 +78,18 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Ajout besoin
+  // Ajout besoin J+1
   document.getElementById("btnAddBesoin")?.addEventListener("click", async () => {
     const d=besoinDate.value, eq=besoinEquipe.value, m=besoinMateriel.value, c=besoinCible.value, com=besoinComment.value;
     const msg=besoinMsg; msg.textContent="Ajout en cours..."; msg.className="muted";
     if(!d||!eq||!m||!c){msg.textContent="Renseignez date, équipe, matériel et cible."; msg.className="error"; return;}
-    try{const r=await apiGet({action:"addBesoins", date:d, equipe:eq, materiel:m, cible:c, commentaire:com});
+    try{
+      const r=await apiGet({action:"addBesoins", date:d, equipe:eq, materiel:m, cible:c, commentaire:com});
       msg.textContent=(typeof r==="string"?r:"Ajout effectué"); msg.className="ok"; besoinCible.value=""; besoinComment.value="";
     }catch(e){msg.textContent="Erreur: "+e.message; msg.className="error";}
   });
 
-  // Snapshot
+  // Snapshot Restes Zones
   document.getElementById("btnSnapshot")?.addEventListener("click", async () => {
     const d=snapshotDate.value, m=snapshotMsg; m.textContent="Snapshot en cours..."; m.className="muted";
     if(!d){m.textContent="Choisissez une date."; m.className="error"; return;}
@@ -85,18 +97,19 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){m.textContent="Erreur: "+e.message; m.className="error";}
   });
 
-  // Calcul plan
+  // Calcul du plan J+1
   document.getElementById("btnCalculerPlan")?.addEventListener("click", async () => {
     const d=planDate.value, a=aggContainer, t=detailContainer, b=btnGenererMouvements;
     if(!d){a.textContent="Veuillez sélectionner une date."; t.textContent=""; b.disabled=true; return;}
     a.textContent="Calcul en cours..."; t.textContent=""; b.disabled=true;
-    try{const r=await apiGet({plan:"reappro", date:d});
-      if(r&&r.agregat){ if(r.agregat.length){a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false;} else {a.textContent="Aucun besoin agrégé.";}} else {a.textContent="Aucune donnée.";}
+    try{
+      const r=await apiGet({plan:"reappro", date:d});
+      if(r&&r.agregat){ if(r.agregat.length){a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false;} else {a.textContent="Aucun besoin agrégé.";} } else {a.textContent="Aucune donnée.";}
       if(r&&r.details){t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details);} else {t.textContent="";}
     }catch(e){a.textContent="Erreur: "+e.message; t.textContent="";}
   });
 
-  // Génération mouvements
+  // Génération des mouvements VC → Bibliothèque
   document.getElementById("btnGenererMouvements")?.addEventListener("click", async () => {
     const d=planDate.value, a=aggContainer; if(!d)return;
     a.textContent="Génération des mouvements en cours...";
@@ -104,9 +117,9 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){a.innerHTML=`<p class="error">Erreur: ${e.message}</p>`;}
   });
 
-  // Legacy multi-matériels
+  // Legacy : enregistrement multi-matériels
   document.getElementById('btnLegacyAddLine')?.addEventListener('click', ()=> addLegacyRow());
-  document.getElementById('btnLegacySave')?.addEventListener('click', async ()=> {
+  document.getElementById('btnLegacySave')?.addEventListener('click', async ()=>{
     const msg = document.getElementById('legacyMsg'); msg.textContent="Enregistrement..."; msg.className="muted";
     const d=legacyDate.value, type=legacyType.value, feuille=legacyFeuille.value, zone=legacyZone.value;
     const rows = Array.from(document.querySelectorAll('#legacyItems tr')).map(tr=>({
@@ -124,6 +137,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ msg.textContent='Erreur: '+e.message; msg.className='error'; }
   });
 
+  // État des stocks par zone (version robuste avec messages d'erreur)
+  document.getElementById("btnChargerEtat")?.addEventListener("click", async ()=>{
+    const z = document.getElementById("etatZone")?.value;
+    const cont = document.getElementById("etatTable");
+    if(!z){ cont.textContent = "Choisissez une zone."; return; }
+    cont.textContent = "Chargement...";
+    try{
+      const r = await apiGet({ etat: "1", zone: z });
+      if (Array.isArray(r)) {
+        const headers = r[0] || ["Matériel","Quantité"];
+        const rows = r.slice(1) || [];
+        cont.innerHTML = rows.length ? toTable(headers, rows) : "Aucun article pour cette zone.";
+      } else if (r && r.error) {
+        cont.innerHTML = `<p class="error">${r.error}</p>`;
+      } else {
+        cont.textContent = "Réponse inattendue.";
+      }
+    }catch(e){ cont.textContent = "Erreur: " + e.message; }
+  });
+
+  // Init
   setToday("besoinDate"); setToday("snapshotDate"); setToday("planDate"); setToday("legacyDate");
   initLists();
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
