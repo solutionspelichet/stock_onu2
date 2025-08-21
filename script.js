@@ -1,4 +1,4 @@
-// Frontend logic + Tabs + Multi-matériels (legacy) + Aperçu Réappro + Restes par équipe (zone override) + Besoins batch
+// Frontend logic + Tabs + Aperçu Réappro + Restes par équipe (zone override) + Besoins batch + Legacy multi-matériels
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -10,18 +10,12 @@ async function apiGet(params) {
 }
 
 function setToday(id){const el=document.getElementById(id); if(el) el.value=new Date().toISOString().slice(0,10);}
+function setTomorrow(id){const el=document.getElementById(id); if(!el) return; const d=new Date(); d.setDate(d.getDate()+1); el.value=d.toISOString().slice(0,10);}
 function toTable(h,rows){
   const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead>";
   const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
   return `<table>${th+tb}</table>`;
 }
-function setTomorrow(id){
-  const el=document.getElementById(id);
-  if(!el) return;
-  const d=new Date(); d.setDate(d.getDate()+1);
-  el.value=d.toISOString().slice(0,10);
-}
-
 
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
@@ -35,7 +29,7 @@ function initTabs() {
   }); });
 }
 
-// ───────── Réappro – aides dynamiques
+// ───────── State
 let _matsList = [];
 let _zonesList = [];
 let _cacheEquipeInfo = new Map();
@@ -98,7 +92,8 @@ function ensurePreviewBox(){
   if (document.getElementById("besoinApercu")) return;
   const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
   if (!card) return;
-  // bloc aperçu
+
+  // Aperçu
   const box = document.createElement('div');
   box.id = "besoinApercu";
   box.style.marginTop = "10px";
@@ -109,7 +104,7 @@ function ensurePreviewBox(){
   box.innerHTML = "Aperçu : choisissez une équipe, un matériel, une date et une cible.";
   card.appendChild(box);
 
-  // bloc besoins batch (multi-lignes)
+  // Besoins batch
   const batch = document.createElement('div');
   batch.style.marginTop = "14px";
   batch.innerHTML = `
@@ -169,7 +164,7 @@ const updatePreview = debounce(async ()=>{
 
 // ───────── UI Saisie Restes Équipe (injectée dans la carte "Clôture J")
 function ensureRestesUI(){
-  if (document.getElementById("restesEquipe")) return; // déjà injecté
+  if (document.getElementById("restesEquipe")) return;
   const card = document.querySelector('#tab-reappro .card:nth-of-type(3)'); // carte "Clôture J"
   if (!card) return;
 
@@ -204,7 +199,7 @@ function ensureRestesUI(){
         <span id="restesMsg" class="muted"></span>
       </div>
     </div>
-    <p class="muted">Ces valeurs alimentent l’onglet <b>Restes Zones</b> à la date choisie (champ « Date à figer »).<br/>Si la zone n’est pas trouvée pour l’équipe, sélectionnez-la ici.</p>
+    <p class="muted">Ces valeurs alimentent l’onglet <b>Restes Zones</b> à la date choisie (champ « Date à figer »). Si la zone n’est pas trouvée pour l’équipe, sélectionnez-la ici.</p>
   `;
   card.appendChild(wrap);
 }
@@ -234,7 +229,7 @@ async function initLists() {
   const zoneRestes = document.getElementById("restesZone");
   [zoneSel1,zoneSel2,zoneRestes].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (_zonesList||[]).forEach(z=>{const o=document.createElement("option");o.value=o.textContent=z; sel.appendChild(o);}); });
 
-  // Prépare 1ère ligne pour les tableaux si vides
+  // Lignes par défaut si vides
   const tbodyLegacy = document.getElementById('legacyItems');
   if (tbodyLegacy && !tbodyLegacy.children.length) addLegacyRow();
   const tbodyRestes = document.getElementById('restesRows');
@@ -248,7 +243,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   ensurePreviewBox();
   ensureRestesUI();
-  setTomorrow("planDate");
 
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
@@ -257,7 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Ajout besoin J+1 (unitaire)
+  // Besoins J+1 (unitaire)
   document.getElementById("btnAddBesoin")?.addEventListener("click", async () => {
     const d=besoinDate.value, eq=besoinEquipe.value, m=besoinMateriel.value, c=besoinCible.value, com=besoinComment.value;
     const msg=besoinMsg; msg.textContent="Ajout en cours..."; msg.className="muted";
@@ -299,16 +293,29 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){m.textContent="Erreur: "+e.message; m.className="error";}
   });
 
-  // Calcul du plan J+1
+  // Calcul du plan J+1 (utilise restes de J)
   document.getElementById("btnCalculerPlan")?.addEventListener("click", async () => {
     const d=planDate.value, a=aggContainer, t=detailContainer, b=btnGenererMouvements;
     if(!d){a.textContent="Veuillez sélectionner une date."; t.textContent=""; b.disabled=true; return;}
     a.textContent="Calcul en cours..."; t.textContent=""; b.disabled=true;
+
+    let meta = document.getElementById('planMeta');
+    if (!meta) { meta = document.createElement('p'); meta.id='planMeta'; meta.className='muted'; a.parentNode.insertBefore(meta, a); }
+
     try{
       const r=await apiGet({plan:"reappro", date:d});
-      if(r&&r.agregat){ if(r.agregat.length){a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false;} else {a.textContent="Aucun besoin agrégé.";} } else {a.textContent="Aucune donnée.";}
-      if(r&&r.details){t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details);} else {t.textContent="";}
-    }catch(e){a.textContent="Erreur: "+e.message; t.textContent="";}
+      meta.textContent = r && (r.veille || r.dateVeille) ? `Restes utilisés : ${r.veille || r.dateVeille} (veille)` : "";
+
+      if(r&&r.agregat){ 
+        if(r.agregat.length){ a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false; } 
+        else { a.textContent="Aucun besoin agrégé."; }
+      } else { a.textContent="Aucune donnée."; }
+
+      if(r&&r.details){ t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details);} 
+      else { t.textContent=""; }
+    }catch(e){
+      a.textContent="Erreur: "+e.message; t.textContent=""; meta.textContent="";
+    }
   });
 
   // Génération des mouvements VC → Bibliothèque
@@ -339,7 +346,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ msg.textContent='Erreur: '+e.message; msg.className='error'; }
   });
 
-  // État des stocks par zone (legacy)
+  // État des stocks par zone
   document.getElementById("btnChargerEtat")?.addEventListener("click", async ()=>{
     const z = document.getElementById("etatZone")?.value;
     const cont = document.getElementById("etatTable");
@@ -406,8 +413,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Init
-  setToday("besoinDate"); setToday("snapshotDate"); setToday("planDate"); setToday("legacyDate");
-  ensureRestesUI(); // injecter avant initLists pour que les selects existent
+  setToday("besoinDate"); setToday("snapshotDate"); setTomorrow("planDate"); setToday("legacyDate");
+  ensureRestesUI();
   initLists().then(updatePreview);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
 });
