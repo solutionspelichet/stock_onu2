@@ -21,8 +21,7 @@ function setTomorrow(id){
   const d=new Date(); d.setDate(d.getDate()+1);
   el.value=d.toISOString().slice(0,10);
 }
-// … dans DOMContentLoaded :
-setTomorrow("planDate");
+
 
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
@@ -249,6 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   ensurePreviewBox();
   ensureRestesUI();
+  setTomorrow("planDate");
 
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
