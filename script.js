@@ -1,4 +1,4 @@
-// Frontend logic + Tabs + Multi-matériels (legacy) + Aperçu Réappro + Saisie Restes Équipe
+// Frontend logic + Tabs + Multi-matériels (legacy) + Aperçu Réappro + Restes par équipe (zone override) + Besoins batch
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -30,6 +30,7 @@ function initTabs() {
 
 // ───────── Réappro – aides dynamiques
 let _matsList = [];
+let _zonesList = [];
 let _cacheEquipeInfo = new Map();
 
 function buildMatSelect(value=""){
@@ -38,7 +39,14 @@ function buildMatSelect(value=""){
   if(value) sel.value=value;
   return sel;
 }
+function buildZoneSelect(value=""){
+  const sel = document.createElement('select');
+  _zonesList.forEach(z=>{ const o=document.createElement('option'); o.value=o.textContent=z; sel.appendChild(o); });
+  if(value) sel.value=value;
+  return sel;
+}
 
+// ── Legacy rows
 function addLegacyRow(value="", qty=""){
   const tbody = document.getElementById('legacyItems');
   const tr = document.createElement('tr');
@@ -51,11 +59,39 @@ function addLegacyRow(value="", qty=""){
   tbody.appendChild(tr);
 }
 
+// ── Besoins batch rows
+function addBesoinsRow(value="", cible="", comment=""){
+  const tbody = document.getElementById('besoinsRows');
+  const tr = document.createElement('tr');
+  const tdMat = document.createElement('td'); const tdC = document.createElement('td'); const tdCom = document.createElement('td'); const tdRm = document.createElement('td');
+  const sel = buildMatSelect(value);
+  const inputC = document.createElement('input'); inputC.type='number'; inputC.min='0'; inputC.step='1'; inputC.value = cible;
+  const inputCom = document.createElement('input'); inputCom.type='text'; inputCom.placeholder='Commentaire (optionnel)'; inputCom.value = comment;
+  const btn = document.createElement('button'); btn.textContent='Supprimer'; btn.className='remove-btn'; btn.addEventListener('click', ()=> tr.remove());
+  tdMat.appendChild(sel); tdC.appendChild(inputC); tdCom.appendChild(inputCom); tdRm.appendChild(btn);
+  tr.appendChild(tdMat); tr.appendChild(tdC); tr.appendChild(tdCom); tr.appendChild(tdRm);
+  tbody.appendChild(tr);
+}
+
+// ── Restes rows
+function addRestesRow(value="", qty=""){
+  const tbody = document.getElementById('restesRows');
+  const tr = document.createElement('tr');
+  const tdMat = document.createElement('td'); const tdQty = document.createElement('td'); const tdRm = document.createElement('td');
+  const sel = buildMatSelect(value);
+  const input = document.createElement('input'); input.type='number'; input.min='0'; input.step='1'; input.value = qty;
+  const btn = document.createElement('button'); btn.textContent='Supprimer'; btn.className='remove-btn'; btn.addEventListener('click', ()=> tr.remove());
+  tdMat.appendChild(sel); tdQty.appendChild(input); tdRm.appendChild(btn);
+  tr.appendChild(tdMat); tr.appendChild(tdQty); tr.appendChild(tdRm);
+  tbody.appendChild(tr);
+}
+
 // ── Aperçu dynamique (Réappro J+1)
 function ensurePreviewBox(){
   if (document.getElementById("besoinApercu")) return;
   const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
   if (!card) return;
+  // bloc aperçu
   const box = document.createElement('div');
   box.id = "besoinApercu";
   box.style.marginTop = "10px";
@@ -66,11 +102,24 @@ function ensurePreviewBox(){
   box.innerHTML = "Aperçu : choisissez une équipe, un matériel, une date et une cible.";
   card.appendChild(box);
 
-  const hint = document.createElement('p');
-  hint.className = "muted";
-  hint.style.marginTop = "8px";
-  hint.innerHTML = "Astuce : <b>Clôture J</b> doit être faite la veille pour que le <i>reste</i> reflète bien la réalité (sinon on utilise l’état instantané).";
-  card.appendChild(hint);
+  // bloc besoins batch (multi-lignes)
+  const batch = document.createElement('div');
+  batch.style.marginTop = "14px";
+  batch.innerHTML = `
+    <h3 style="margin:8px 0;">Besoins (multi-lignes) – pour l'équipe et la date ci-dessus</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:50%;">Matériel</th><th style="width:20%;">Cible</th><th style="width:25%;">Commentaire</th><th style="width:5%;">&nbsp;</th></tr></thead>
+        <tbody id="besoinsRows"></tbody>
+      </table>
+    </div>
+    <div class="toolbar" style="margin-top:8px;">
+      <button id="btnBesoinsAddLine">+ Ajouter une ligne</button>
+      <button id="btnBesoinsSave" class="secondary">Enregistrer ces besoins</button>
+      <span id="besoinsMsg" class="muted"></span>
+    </div>
+  `;
+  card.appendChild(batch);
 }
 
 async function getEquipeInfo(equipe){
@@ -79,39 +128,26 @@ async function getEquipeInfo(equipe){
   _cacheEquipeInfo.set(equipe, info||{});
   return info||{};
 }
-
 async function getReste(zone, materiel, dateStr){
   const r = await apiGet({ get: "reste", zone, materiel, date: dateStr||"" });
   if (r && typeof r === "object" && "quantite" in r) return r;
   return { quantite: 0, source: "Aucun" };
 }
-
-function debounce(fn, ms=250){
-  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
-}
+function debounce(fn, ms=250){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
 const updatePreview = debounce(async ()=>{
-  ensurePreviewBox();
-  const box = document.getElementById("besoinApercu");
-  if (!box) return;
-
+  const box = document.getElementById("besoinApercu"); if (!box) return;
   const d = document.getElementById("besoinDate")?.value || "";
   const eq = document.getElementById("besoinEquipe")?.value || "";
   const mat = document.getElementById("besoinMateriel")?.value || "";
   const cible = parseInt(document.getElementById("besoinCible")?.value||"0",10) || 0;
 
-  if (!eq || !mat || !d) {
-    box.innerHTML = "Aperçu : choisissez une équipe, un matériel et une date.";
-    return;
-  }
+  if (!eq || !mat || !d) { box.innerHTML = "Aperçu : choisissez une équipe, un matériel et une date."; return; }
 
   try{
     const info = await getEquipeInfo(eq);
     const zone = info?.zone || "";
-    if (!zone) {
-      box.innerHTML = `Équipe: <b>${eq}</b> • Zone inconnue (renseignez l'onglet <i>Équipes</i>).`;
-      return;
-    }
+    if (!zone) { box.innerHTML = `Équipe: <b>${eq}</b> • Zone inconnue (renseignez l'onglet <i>Équipes</i>).`; return; }
     const reste = await getReste(zone, mat, d);
     const besoin = Math.max(0, (cible||0) - (reste.quantite||0));
     box.innerHTML = `
@@ -121,9 +157,7 @@ const updatePreview = debounce(async ()=>{
       <div><b>Cible (demain):</b> ${cible || 0}</div>
       <div><b>Besoin estimé:</b> ${besoin}</div>
     `;
-  }catch(e){
-    box.innerHTML = `<span class="error">Aperçu indisponible: ${e.message}</span>`;
-  }
+  }catch(e){ box.innerHTML = `<span class="error">Aperçu indisponible: ${e.message}</span>`; }
 }, 200);
 
 // ───────── UI Saisie Restes Équipe (injectée dans la carte "Clôture J")
@@ -141,11 +175,12 @@ function ensureRestesUI(){
         <label>Équipe</label>
         <select id="restesEquipe"></select>
       </div>
-      <div style="display:flex; align-items:end;">
-        <button id="btnRestesCharger">Charger les restes actuels</button>
+      <div>
+        <label>Zone (override si nécessaire)</label>
+        <select id="restesZone"></select>
       </div>
       <div style="display:flex; align-items:end;">
-        <span id="restesMsg" class="muted"></span>
+        <button id="btnRestesCharger">Charger les restes actuels</button>
       </div>
     </div>
 
@@ -159,50 +194,46 @@ function ensureRestesUI(){
       <div class="toolbar" style="margin-top:8px;">
         <button id="btnRestesAddLine">+ Ajouter une ligne</button>
         <button id="btnRestesSave" class="secondary">Enregistrer les restes (équipe)</button>
+        <span id="restesMsg" class="muted"></span>
       </div>
     </div>
-    <p class="muted">Ces valeurs alimentent l’onglet <b>Restes Zones</b> à la date choisie (champ « Date à figer » ci-dessus).<br/>Les lignes existantes pour cette <i>date + zone de l’équipe</i> seront remplacées.</p>
+    <p class="muted">Ces valeurs alimentent l’onglet <b>Restes Zones</b> à la date choisie (champ « Date à figer »).<br/>Si la zone n’est pas trouvée pour l’équipe, sélectionnez-la ici.</p>
   `;
   card.appendChild(wrap);
 }
 
-function addRestesRow(value="", qty=""){
-  const tbody = document.getElementById('restesRows');
-  const tr = document.createElement('tr');
-  const tdMat = document.createElement('td'); const tdQty = document.createElement('td'); const tdRm = document.createElement('td');
-  const sel = buildMatSelect(value);
-  const input = document.createElement('input'); input.type='number'; input.min='0'; input.step='1'; input.value = qty;
-  const btn = document.createElement('button'); btn.textContent='Supprimer'; btn.className='remove-btn'; btn.addEventListener('click', ()=> tr.remove());
-  tdMat.appendChild(sel); tdQty.appendChild(input); tdRm.appendChild(btn);
-  tr.appendChild(tdMat); tr.appendChild(tdQty); tr.appendChild(tdRm);
-  tbody.appendChild(tr);
-}
-
+// ───────── Init listes
 async function initLists() {
+  // Équipes
   const eqSel = document.getElementById("besoinEquipe"); if (eqSel) { eqSel.innerHTML=""; }
   const equipes = await apiGet({ get: "equipes" });
   (equipes||[]).forEach(e=>{
     const o1=document.createElement("option"); o1.value=o1.textContent=e; eqSel&&eqSel.appendChild(o1);
   });
 
-  // Remplit aussi la liste d'équipe pour la saisie Restes
+  // Équipes pour Restes
   const eqRestes = document.getElementById("restesEquipe");
   if (eqRestes){ eqRestes.innerHTML=""; (equipes||[]).forEach(e=>{ const o=document.createElement("option"); o.value=o.textContent=e; eqRestes.appendChild(o); }); }
 
+  // Matériels
   _matsList = await apiGet({ get: "materiels" }) || [];
   const matSel1 = document.getElementById("besoinMateriel");
   [matSel1].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (_matsList||[]).forEach(m=>{const o=document.createElement("option");o.value=o.textContent=m; sel.appendChild(o);}); });
 
-  const zones = await apiGet({ get: "zones" });
+  // Zones
+  _zonesList = await apiGet({ get: "zones" }) || [];
   const zoneSel1 = document.getElementById("legacyZone");
   const zoneSel2 = document.getElementById("etatZone");
-  [zoneSel1,zoneSel2].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (zones||[]).forEach(z=>{const o=document.createElement("option");o.value=o.textContent=z; sel.appendChild(o);}); });
+  const zoneRestes = document.getElementById("restesZone");
+  [zoneSel1,zoneSel2,zoneRestes].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (_zonesList||[]).forEach(z=>{const o=document.createElement("option");o.value=o.textContent=z; sel.appendChild(o);}); });
 
   // Prépare 1ère ligne pour les tableaux si vides
   const tbodyLegacy = document.getElementById('legacyItems');
   if (tbodyLegacy && !tbodyLegacy.children.length) addLegacyRow();
   const tbodyRestes = document.getElementById('restesRows');
   if (tbodyRestes && !tbodyRestes.children.length) addRestesRow();
+  const tbodyBesoins = document.getElementById('besoinsRows');
+  if (tbodyBesoins && !tbodyBesoins.children.length) addBesoinsRow();
 }
 
 // ───────── Events
@@ -218,7 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Ajout besoin J+1
+  // Ajout besoin J+1 (unitaire)
   document.getElementById("btnAddBesoin")?.addEventListener("click", async () => {
     const d=besoinDate.value, eq=besoinEquipe.value, m=besoinMateriel.value, c=besoinCible.value, com=besoinComment.value;
     const msg=besoinMsg; msg.textContent="Ajout en cours..."; msg.className="muted";
@@ -230,7 +261,29 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){msg.textContent="Erreur: "+e.message; msg.className="error";}
   });
 
-  // Snapshot Restes Zones (auto)
+  // Besoins J+1 (batch multi-lignes)
+  document.getElementById("btnBesoinsAddLine")?.addEventListener("click", ()=> addBesoinsRow());
+  document.getElementById("btnBesoinsSave")?.addEventListener("click", async ()=>{
+    const d = document.getElementById('besoinDate')?.value;
+    const eq = document.getElementById('besoinEquipe')?.value;
+    const msg = document.getElementById('besoinsMsg');
+    if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
+    const rows = Array.from(document.querySelectorAll('#besoinsRows tr')).map(tr=>({
+      materiel: tr.querySelector('select')?.value || '',
+      cible: parseInt(tr.querySelector('input[type=number]')?.value||'0',10) || 0,
+      commentaire: tr.querySelector('input[type=text]')?.value || ''
+    })).filter(r=> (r.materiel||"").trim() !== '' && r.cible>0);
+    if (rows.length===0){ msg.textContent="Ajoutez au moins une ligne (cible > 0)."; msg.className="error"; return; }
+    msg.textContent="Enregistrement..."; msg.className="muted";
+    try{
+      const payload = encodeURIComponent(JSON.stringify(rows));
+      const r = await apiGet({ action:"addBesoinsBatch", date: d, equipe: eq, lignes: payload });
+      msg.textContent = typeof r==="string" ? r : "Besoins enregistrés.";
+      msg.className="ok";
+    }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
+  });
+
+  // Snapshot Restes Zones
   document.getElementById("btnSnapshot")?.addEventListener("click", async () => {
     const d=snapshotDate.value, m=snapshotMsg; m.textContent="Snapshot en cours..."; m.className="muted";
     if(!d){m.textContent="Choisissez une date."; m.className="error"; return;}
@@ -298,21 +351,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ cont.textContent = "Erreur: " + e.message; }
   });
 
-  // ── Restes Équipe : injection des listeners
+  // Restes Équipe
   document.getElementById('btnRestesAddLine')?.addEventListener('click', ()=> addRestesRow());
   document.getElementById('btnRestesCharger')?.addEventListener('click', async ()=>{
     const d = document.getElementById('snapshotDate')?.value;
     const eq = document.getElementById('restesEquipe')?.value;
+    const zSel = document.getElementById('restesZone');
     const msg = document.getElementById('restesMsg');
     const tbody = document.getElementById('restesRows');
     if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
     msg.textContent="Chargement..."; msg.className="muted";
     try{
-      const r = await apiGet({ get: "restesEquipe", date: d, equipe: eq });
+      const r = await apiGet({ get: "restesEquipe", date: d, equipe: eq, zone: zSel?.value||"" });
       tbody.innerHTML = "";
       const lignes = (r && Array.isArray(r.lignes)) ? r.lignes : [];
-      if (lignes.length===0) addRestesRow();
-      lignes.forEach(([m,q])=> addRestesRow(m, q));
+      if (r && r.zone && zSel){ zSel.value = r.zone; }
+      if (lignes.length===0) addRestesRow(); else lignes.forEach(([m,q])=> addRestesRow(m, q));
       msg.textContent = r?.zone ? `Zone: ${r.zone} • ${lignes.length} ligne(s)` : `${lignes.length} ligne(s) chargée(s)`;
       msg.className="ok";
     }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
@@ -320,6 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('btnRestesSave')?.addEventListener('click', async ()=>{
     const d = document.getElementById('snapshotDate')?.value;
     const eq = document.getElementById('restesEquipe')?.value;
+    const zSel = document.getElementById('restesZone');
     const msg = document.getElementById('restesMsg');
     if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
     const rows = Array.from(document.querySelectorAll('#restesRows tr')).map(tr=>({
@@ -330,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
     msg.textContent="Enregistrement..."; msg.className="muted";
     try{
       const payload = encodeURIComponent(JSON.stringify(rows));
-      const r = await apiGet({ action:"saveRestesEquipe", date: d, equipe: eq, lignes: payload });
+      const r = await apiGet({ action:"saveRestesEquipe", date: d, equipe: eq, zone: zSel?.value||"", lignes: payload });
       msg.textContent = typeof r==="string" ? r : "Restes enregistrés.";
       msg.className="ok";
     }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
@@ -344,7 +399,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Init
   setToday("besoinDate"); setToday("snapshotDate"); setToday("planDate"); setToday("legacyDate");
-  ensureRestesUI(); // injecte la zone juste avant initLists pour remplir le select équipe
+  ensureRestesUI(); // injecter avant initLists pour que les selects existent
   initLists().then(updatePreview);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
 });
