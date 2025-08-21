@@ -1,4 +1,4 @@
-// Frontend logic + Tabs + Multi-matériels (legacy)
+// Frontend logic + Tabs + Multi-matériels (legacy) + Aperçu Réappro
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -28,7 +28,10 @@ function initTabs() {
   }); });
 }
 
+// ───────── Réappro – aides dynamiques
 let _matsList = [];
+let _cacheEquipeInfo = new Map();
+
 function buildMatSelect(value=""){
   const sel = document.createElement('select');
   _matsList.forEach(m=>{ const o=document.createElement('option'); o.value=o.textContent=m; sel.appendChild(o); });
@@ -67,9 +70,85 @@ async function initLists() {
   if (tbody && !tbody.children.length) addLegacyRow();
 }
 
+// Crée la zone d’aperçu si absente
+function ensurePreviewBox(){
+  if (document.getElementById("besoinApercu")) return;
+  const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
+  if (!card) return;
+  const box = document.createElement('div');
+  box.id = "besoinApercu";
+  box.style.marginTop = "10px";
+  box.style.padding = "10px";
+  box.style.border = "1px dashed #ddd";
+  box.style.borderRadius = "8px";
+  box.className = "muted";
+  box.innerHTML = "Aperçu : choisissez une équipe, un matériel, une date et une cible.";
+  card.appendChild(box);
+
+  const hint = document.createElement('p');
+  hint.className = "muted";
+  hint.style.marginTop = "8px";
+  hint.innerHTML = "Astuce : <b>Clôture J</b> doit être faite la veille pour que le <i>reste</i> reflète bien la réalité (sinon on utilise l’état instantané).";
+  card.appendChild(hint);
+}
+
+async function getEquipeInfo(equipe){
+  if (_cacheEquipeInfo.has(equipe)) return _cacheEquipeInfo.get(equipe);
+  const info = await apiGet({ get: "infoEquipe", equipe });
+  _cacheEquipeInfo.set(equipe, info||{});
+  return info||{};
+}
+
+async function getReste(zone, materiel, dateStr){
+  const r = await apiGet({ get: "reste", zone, materiel, date: dateStr||"" });
+  if (r && typeof r === "object" && "quantite" in r) return r;
+  return { quantite: 0, source: "Aucun" };
+}
+
+function debounce(fn, ms=250){
+  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
+}
+
+const updatePreview = debounce(async ()=>{
+  ensurePreviewBox();
+  const box = document.getElementById("besoinApercu");
+  if (!box) return;
+
+  const d = document.getElementById("besoinDate")?.value || "";
+  const eq = document.getElementById("besoinEquipe")?.value || "";
+  const mat = document.getElementById("besoinMateriel")?.value || "";
+  const cible = parseInt(document.getElementById("besoinCible")?.value||"0",10) || 0;
+
+  if (!eq || !mat || !d) {
+    box.innerHTML = "Aperçu : choisissez une équipe, un matériel et une date.";
+    return;
+  }
+
+  try{
+    const info = await getEquipeInfo(eq);
+    const zone = info?.zone || "";
+    if (!zone) {
+      box.innerHTML = `Équipe: <b>${eq}</b> • Zone inconnue (renseignez l'onglet <i>Équipes</i>).`;
+      return;
+    }
+    const reste = await getReste(zone, mat, d);
+    const besoin = Math.max(0, (cible||0) - (reste.quantite||0));
+    box.innerHTML = `
+      <div><b>Équipe:</b> ${eq} • <b>Zone:</b> ${zone}</div>
+      <div><b>Matériel:</b> ${mat}</div>
+      <div><b>Reste (veille):</b> ${reste.quantite} <span class="muted">(${reste.source})</span></div>
+      <div><b>Cible (demain):</b> ${cible || 0}</div>
+      <div><b>Besoin estimé:</b> ${besoin}</div>
+    `;
+  }catch(e){
+    box.innerHTML = `<span class="error">Aperçu indisponible: ${e.message}</span>`;
+  }
+}, 200);
+
 // ───────── Events
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
+  ensurePreviewBox();
 
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
@@ -86,6 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try{
       const r=await apiGet({action:"addBesoins", date:d, equipe:eq, materiel:m, cible:c, commentaire:com});
       msg.textContent=(typeof r==="string"?r:"Ajout effectué"); msg.className="ok"; besoinCible.value=""; besoinComment.value="";
+      updatePreview(); // refresh aperçu après ajout
     }catch(e){msg.textContent="Erreur: "+e.message; msg.className="error";}
   });
 
@@ -137,7 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ msg.textContent='Erreur: '+e.message; msg.className='error'; }
   });
 
-  // État des stocks par zone (version robuste avec messages d'erreur)
+  // État des stocks par zone (legacy)
   document.getElementById("btnChargerEtat")?.addEventListener("click", async ()=>{
     const z = document.getElementById("etatZone")?.value;
     const cont = document.getElementById("etatTable");
@@ -157,8 +237,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ cont.textContent = "Erreur: " + e.message; }
   });
 
+  // Liens d’aperçu
+  ["besoinDate","besoinEquipe","besoinMateriel","besoinCible"].forEach(id=>{
+    document.getElementById(id)?.addEventListener("change", updatePreview);
+    document.getElementById(id)?.addEventListener("input", updatePreview);
+  });
+
   // Init
   setToday("besoinDate"); setToday("snapshotDate"); setToday("planDate"); setToday("legacyDate");
-  initLists();
+  initLists().then(updatePreview);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
 });
