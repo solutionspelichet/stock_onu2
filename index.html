@@ -2,117 +2,239 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestion Stock ONU – Réappro J+1</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="style.css" />
-  <meta name="theme-color" content="#FF9800" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ONU — Suivi Stock & Réappro</title>
+
+  <!-- PWA (facultatif, déjà géré par service worker) -->
+  <link rel="manifest" href="./manifest.json" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-<header>
-  <h1>Gestion Stock ONU</h1>
-  <nav class="tabs">
-    <button class="tab-button active" data-tab="tab-reappro">Réappro J+1</button>
-    <button class="tab-button" data-tab="tab-legacy">Fonctionnalités précédentes</button>
-  </nav>
-</header>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📦</span>
+      <h1>ONU — Suivi Stock</h1>
+    </div>
+    <div class="ping">
+      <button id="btnPing" class="secondary">Tester l’API</button>
+      <span id="pingStatus" class="muted"></span>
+    </div>
+  </header>
 
-<main>
-  <!-- Onglet: Réappro J+1 -->
-  <section id="tab-reappro" class="tab-panel">
-    <section class="card">
-      <h2>Statut API</h2>
-      <div class="toolbar">
-        <button id="btnPing">Tester la connexion</button>
-        <span id="pingStatus" class="muted"></span>
-        <span class="pill">Endpoint: https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec</span>
-      </div>
-    </section>
+  <main class="container">
+    <!-- Onglets -->
+    <nav class="tabs">
+      <button class="tab-button active" data-tab="tab-reappro">Réappro J+1</button>
+      <button class="tab-button" data-tab="tab-legacy">Mouvements (legacy)</button>
+      <button class="tab-button" data-tab="tab-advanced">Fonctionnalités avancées</button>
+    </nav>
 
-    <section class="card">
-      <h2>Saisie Besoins J+1</h2>
-      <div class="row">
-        <div><label for="besoinDate">Date de livraison</label><input type="date" id="besoinDate" /></div>
-        <div><label for="besoinEquipe">Équipe</label><select id="besoinEquipe"></select></div>
-        <div><label for="besoinMateriel">Matériel</label><select id="besoinMateriel"></select></div>
-        <div><label for="besoinCible">Cible (stock désiré demain)</label><input type="number" id="besoinCible" min="0" step="1" /></div>
-      </div>
-      <div class="row-2" style="margin-top:10px;">
-        <div><label for="besoinComment">Commentaire</label><input type="text" id="besoinComment" placeholder="Optionnel" /></div>
-        <div style="display:flex; align-items:end; gap:10px;"><button id="btnAddBesoin">Ajouter la ligne</button><span id="besoinMsg" class="muted"></span></div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Clôture J (Snapshot des restes)</h2>
-      <div class="row-3">
-        <div><label for="snapshotDate">Date à figer</label><input type="date" id="snapshotDate" /></div>
-        <div style="display:flex; align-items:end;"><button id="btnSnapshot">Figer les restes</button></div>
-        <div style="display:flex; align-items:end;"><span id="snapshotMsg" class="muted"></span></div>
-      </div>
-      <p class="muted">Copie l'état courant des stocks dans <b>Restes Zones</b> à la date choisie.</p>
-    </section>
-
-    <section class="card">
-      <h2>Calcul du plan J+1</h2>
-      <div class="row-3">
-        <div><label for="planDate">Date de livraison</label><input type="date" id="planDate" /></div>
-        <div style="display:flex; align-items:end;"><button id="btnCalculerPlan">Calculer le plan</button></div>
-        <div style="display:flex; align-items:end;"><button id="btnGenererMouvements" class="secondary" disabled>Générer VC → Bibliothèque</button></div>
-      </div>
-      <h3 style="margin-top:14px;">Agrégat – Prélèvements Voie Creuse</h3>
-      <div id="aggContainer" class="muted">Aucun calcul.</div>
-      <h3 style="margin-top:14px;">Détail par équipe</h3>
-      <div id="detailContainer" class="muted">Aucun calcul.</div>
-    </section>
-  </section>
-
-  <!-- Onglet: Fonctionnalités précédentes -->
-  <section id="tab-legacy" class="tab-panel hidden">
-    <section class="card">
-      <h2>Mouvement multi-matériels (Entrée / Sortie / Transfert)</h2>
-      <div class="row">
-        <div><label>Date</label><input type="date" id="legacyDate" /></div>
-        <div><label>Type</label>
-          <select id="legacyType"><option>Entrée</option><option>Sortie</option><option>Transfert</option></select>
+    <!-- TAB: Réappro -->
+    <section id="tab-reappro" class="tab-panel">
+      <!-- Étape 1 -->
+      <div class="card">
+        <div class="card-title">
+          <span class="badge-step">Étape 1</span>
+          <h2>Clôture J — figer les restes (snapshot global)</h2>
         </div>
-        <div><label>Feuille cible</label>
-          <select id="legacyFeuille">
-            <option>Stock Voie Creuse</option>
-            <option>Stock Bibliothèque</option>
-            <option>Répartition Journalière</option>
-            <option>Restes Zones</option>
-          </select>
+
+        <div class="row-3">
+          <div>
+            <label>Date à figer (J)</label>
+            <input id="snapshotDate" type="date" />
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:.5rem;">
+            <button id="btnSnapshot">Créer / Remplacer le snapshot</button>
+            <span id="snapshotMsg" class="muted"></span>
+          </div>
+          <div class="help">
+            <p class="muted">
+              Le snapshot copie l’<b>État des Stocks</b> de la date J dans <b>Restes Zones</b>. 
+              Le <b>Plan J+1</b> utilisera ces valeurs comme “restes de la veille”.
+            </p>
+          </div>
         </div>
-        <div><label>Zone</label><select id="legacyZone"></select></div>
       </div>
 
-      <div class="table-wrap">
-        <table id="legacyTable">
-          <thead><tr><th style="width:65%;">Matériel</th><th style="width:25%;">Quantité</th><th style="width:10%;">&nbsp;</th></tr></thead>
-          <tbody id="legacyItems"></tbody>
-        </table>
-        <div class="toolbar" style="margin-top:8px;">
+      <!-- Étape 2 -->
+      <div class="card">
+        <div class="card-title">
+          <span class="badge-step">Étape 2</span>
+          <h2>Saisie Besoins J+1</h2>
+        </div>
+
+        <div class="row-4">
+          <div>
+            <label>Date de livraison (J+1)</label>
+            <input id="besoinDate" type="date" />
+          </div>
+          <div>
+            <label>Équipe</label>
+            <select id="besoinEquipe"></select>
+          </div>
+          <div>
+            <label>Matériel</label>
+            <select id="besoinMateriel"></select>
+          </div>
+          <div>
+            <label>Cible (stock désiré demain)</label>
+            <input id="besoinCible" type="number" min="0" step="1" placeholder="ex. 30" />
+          </div>
+        </div>
+
+        <div class="row-1">
+          <div>
+            <label>Commentaire</label>
+            <input id="besoinComment" type="text" placeholder="Optionnel" />
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="btnAddBesoin" class="accent">Ajouter à la liste ci-dessous</button>
+          <span id="besoinMsg" class="muted"></span>
+        </div>
+        <!-- L’aperçu + le tableau multi-lignes sont injectés ici par script.js (ensurePreviewBox) -->
+      </div>
+
+      <!-- Étape 3 -->
+      <div class="card">
+        <div class="card-title">
+          <span class="badge-step">Étape 3</span>
+          <h2>Clôture J — restes détaillés par équipe</h2>
+        </div>
+        <p class="muted">
+          Saisissez, au besoin, les restes précis par équipe (la <b>zone</b> est par défaut le <b>nom de l’équipe</b>).
+        </p>
+        <!-- L’UI complète est injectée ici par script.js (ensureRestesUI) -->
+      </div>
+
+      <!-- Étape 4 -->
+      <div class="card">
+        <div class="card-title">
+          <span class="badge-step">Étape 4</span>
+          <h2>Plan J+1 & Génération des mouvements</h2>
+        </div>
+
+        <div class="row-3">
+          <div>
+            <label>Date de livraison (J+1)</label>
+            <input id="planDate" type="date" />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button id="btnCalculerPlan">Calculer le plan</button>
+          </div>
+        </div>
+
+        <p id="planMeta" class="muted"></p>
+
+        <div class="split">
+          <div class="panel">
+            <h3>Picking VC → Bibliothèque (agrégat)</h3>
+            <div id="aggContainer" class="scrollbox">Cliquez “Calculer le plan”.</div>
+            <div class="toolbar">
+              <button id="btnGenererMouvements" class="secondary" disabled>Générer les mouvements</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Détails par équipe</h3>
+            <div id="detailContainer" class="scrollbox"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Legacy -->
+    <section id="tab-legacy" class="tab-panel hidden">
+      <div class="card">
+        <div class="card-title">
+          <h2>Mouvements (legacy) — multi-matériels</h2>
+        </div>
+
+        <div class="row-4">
+          <div>
+            <label>Date</label>
+            <input id="legacyDate" type="date" />
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="legacyType">
+              <option>Entrée</option>
+              <option>Sortie</option>
+              <option>Transfert</option>
+            </select>
+          </div>
+          <div>
+            <label>Feuille cible</label>
+            <select id="legacyFeuille">
+              <option>Stock Voie Creuse</option>
+              <option>Stock Bibliothèque</option>
+              <option>Répartition Journalière</option>
+              <option>Restes Zones</option>
+            </select>
+          </div>
+          <div>
+            <label>Zone</label>
+            <select id="legacyZone"></select>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Matériel</th>
+                <th style="width:180px;">Quantité</th>
+                <th style="width:140px;"></th>
+              </tr>
+            </thead>
+            <tbody id="legacyItems"></tbody>
+          </table>
+        </div>
+        <div class="toolbar">
           <button id="btnLegacyAddLine">+ Ajouter une ligne</button>
-          <button id="btnLegacySave" class="secondary">Enregistrer le mouvement (multi-matériels)</button>
+          <button id="btnLegacySave" class="secondary">Enregistrer</button>
           <span id="legacyMsg" class="muted"></span>
         </div>
       </div>
-      <p class="muted">Astuce : utilisez cet écran pour enregistrer en une seule fois plusieurs matériels d'un même mouvement.</p>
     </section>
 
-    <section class="card">
-      <h2>État des stocks par zone</h2>
-      <div class="row-3">
-        <div><label>Zone</label><select id="etatZone"></select></div>
-        <div style="display:flex; align-items:end;"><button id="btnChargerEtat">Charger l'état</button></div>
-        <div style="display:flex; align-items:end;"><span class="muted">Lecture via l'API existante.</span></div>
+    <!-- TAB: Fonctionnalités avancées -->
+    <section id="tab-advanced" class="tab-panel hidden">
+      <div class="card">
+        <div class="card-title">
+          <h2>État des stocks par zone</h2>
+        </div>
+        <div class="row-3">
+          <div>
+            <label>Zone</label>
+            <select id="etatZone"></select>
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button id="btnChargerEtat">Charger</button>
+          </div>
+        </div>
+        <div id="etatTable" class="scrollbox"></div>
       </div>
-      <div id="etatTable" class="muted" style="margin-top:8px;">Aucun résultat.</div>
-    </section>
-  </section>
-</main>
 
-<script src="script.js"></script>
+      <div class="card">
+        <div class="card-title">
+          <h2>Informations</h2>
+        </div>
+        <ul class="muted">
+          <li>La <b>zone d’une équipe</b> = <b>nom de l’équipe</b> par défaut.</li>
+          <li>Le <b>Plan J+1</b> s’appuie sur les <b>restes de la veille</b> (snapshot J) si disponible.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <small class="muted">© ONU • Suivi Stock</small>
+  </footer>
+
+  <!-- JS -->
+  <script src="./script.js"></script>
 </body>
 </html>
