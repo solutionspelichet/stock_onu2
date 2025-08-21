@@ -1,4 +1,5 @@
 // Frontend logic + Aperçu Réappro + Restes équipe (zone override) + Besoins batch + Legacy multi-matériels
+// Dates J+1 par défaut (besoins & plan). Zone par défaut = nom de l'équipe.
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -95,11 +96,9 @@ function ensurePreviewBox(){
   const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
   if (!card) return;
 
-  // Renommer le bouton pour clarifier
   const addBtn = document.getElementById("btnAddBesoin");
   if (addBtn) addBtn.textContent = "Ajouter à la liste ci-dessous";
 
-  // Aperçu
   const box = document.createElement('div');
   box.id = "besoinApercu";
   box.style.marginTop = "10px";
@@ -110,7 +109,6 @@ function ensurePreviewBox(){
   box.innerHTML = "Aperçu : choisissez une équipe, un matériel, une date et une cible.";
   card.appendChild(box);
 
-  // Besoins batch
   const batch = document.createElement('div');
   batch.style.marginTop = "14px";
   batch.innerHTML = `
@@ -155,8 +153,7 @@ const updatePreview = debounce(async ()=>{
 
   try{
     const info = await getEquipeInfo(eq);
-    const zone = info?.zone || "";
-    if (!zone) { box.innerHTML = `Équipe: <b>${eq}</b> • Zone inconnue (renseignez l'onglet <i>Équipes</i>).`; return; }
+    const zone = info?.zone || eq; // défaut = nom équipe
     const reste = await getReste(zone, mat, d);
     const besoin = Math.max(0, (cible||0) - (reste.quantite||0));
     box.innerHTML = `
@@ -229,7 +226,7 @@ async function initLists() {
   const matSel1 = document.getElementById("besoinMateriel");
   [matSel1].forEach(sel=>{ if(!sel) return; sel.innerHTML=""; (_matsList||[]).forEach(m=>{const o=document.createElement("option");o.value=o.textContent=m; sel.appendChild(o);}); });
 
-  // Zones
+  // Zones (inclut aussi les noms d'équipes côté Apps Script)
   _zonesList = await apiGet({ get: "zones" }) || [];
   const zoneSel1 = document.getElementById("legacyZone");
   const zoneSel2 = document.getElementById("etatZone");
@@ -251,8 +248,18 @@ document.addEventListener("DOMContentLoaded", () => {
   ensurePreviewBox();
   ensureRestesUI();
 
-  // Par défaut : J+1 pour la saisie des besoins et le plan ; J pour la clôture
+  // Par défaut : J+1 pour la saisie des besoins et le plan ; J pour la clôture ; legacy = aujourd'hui
   setTomorrow("besoinDate"); setTomorrow("planDate"); setToday("snapshotDate"); setToday("legacyDate");
+
+  // Quand on change d’équipe dans Clôture J, on cale automatiquement la zone sur le nom de l’équipe
+  document.getElementById("restesEquipe")?.addEventListener("change", ()=>{
+    const zSel = document.getElementById("restesZone");
+    const eq = document.getElementById("restesEquipe").value;
+    if (!zSel || !eq) return;
+    let opt = Array.from(zSel.options).find(o=>o.value===eq);
+    if (!opt) { opt = new Option(eq, eq); zSel.add(opt, 0); }
+    zSel.value = eq;
+  });
 
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
@@ -261,7 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Besoins J+1 (unitaire) → ajoute à la liste (ne sauve plus directement)
+  // Besoins J+1 (unitaire) → ajoute à la liste
   document.getElementById("btnAddBesoin")?.addEventListener("click", () => {
     const mat=document.getElementById("besoinMateriel")?.value||"";
     const cible=(document.getElementById("besoinCible")?.value||"").trim();
@@ -420,7 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
   });
 
-  // Liens d’aperçu
+  // Liens d’aperçu (mise à jour dynamique)
   ["besoinDate","besoinEquipe","besoinMateriel","besoinCible"].forEach(id=>{
     document.getElementById(id)?.addEventListener("change", updatePreview);
     document.getElementById(id)?.addEventListener("input", updatePreview);
