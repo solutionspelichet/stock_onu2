@@ -20,6 +20,30 @@ function toTable(h,rows){
   return `<table>${th+tb}</table>`;
 }
 
+let LAST_PLAN = null;
+
+function toCSV(headers, rows){
+  const esc = v => {
+    const s = (v==null? "" : String(v));
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  const head = headers.map(esc).join(";");                // ; pour Excel fr
+  const body = rows.map(r => r.map(esc).join(";")).join("\n");
+  const csv = "\uFEFF" + head + "\n" + body;              // BOM UTF-8
+  return csv;
+}
+function downloadCSV(filename, csv){
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  URL.revokeObjectURL(link.href);
+  link.remove();
+}
+
+
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
   const panels = document.querySelectorAll('.tab-panel');
@@ -284,24 +308,49 @@ document.addEventListener("DOMContentLoaded", () => {
   // Besoins J+1 (batch multi-lignes) — envoi
   document.getElementById("btnBesoinsAddLine")?.addEventListener("click", ()=> addBesoinsRow());
   document.getElementById("btnBesoinsSave")?.addEventListener("click", async ()=>{
-    const d = document.getElementById('besoinDate')?.value;
-    const eq = document.getElementById('besoinEquipe')?.value;
-    const msg = document.getElementById('besoinsMsg');
-    if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
-    const rows = Array.from(document.querySelectorAll('#besoinsRows tr')).map(tr=>({
-      materiel: tr.querySelector('select')?.value || '',
-      cible: parseInt(tr.querySelector('input[type=number]')?.value||'0',10) || 0,
-      commentaire: tr.querySelector('input[type=text]')?.value || ''
-    })).filter(r=> (r.materiel||"").trim() !== '' && r.cible>0);
-    if (rows.length===0){ msg.textContent="Ajoutez au moins une ligne (cible > 0)."; msg.className="error"; return; }
-    msg.textContent="Enregistrement..."; msg.className="muted";
-    try{
-      const payload = encodeURIComponent(JSON.stringify(rows));
-      const r = await apiGet({ action:"addBesoinsBatch", date: d, equipe: eq, lignes: payload });
-      msg.textContent = typeof r==="string" ? r : "Besoins enregistrés.";
-      msg.className="ok";
-    }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
-  });
+  const d = document.getElementById('besoinDate')?.value;
+  const eq = document.getElementById('besoinEquipe')?.value;
+  const msg = document.getElementById('besoinsMsg');
+  if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
+
+  // Lire les lignes saisies
+  const rows = Array.from(document.querySelectorAll('#besoinsRows tr')).map(tr=>({
+    materiel: tr.querySelector('select')?.value || '',
+    cible: parseInt(tr.querySelector('input[type=number]')?.value||'0',10) || 0,
+    commentaire: tr.querySelector('input[type=text]')?.value || ''
+  })).filter(r=> (r.materiel||"").trim() !== '' && r.cible>0);
+  if (rows.length===0){ msg.textContent="Ajoutez au moins une ligne (cible > 0)."; msg.className="error"; return; }
+
+  // Doublons dans la saisie (même matériel répété)
+  const seen = new Set(); const dups = [];
+  rows.forEach(r=>{ if(seen.has(r.materiel)) dups.push(r.materiel); else seen.add(r.materiel); });
+  if (dups.length){
+    msg.textContent = "Doublons dans la saisie : " + [...new Set(dups)].join(", ") + ". Supprimez-les avant d'enregistrer.";
+    msg.className="error"; return;
+  }
+
+  // Doublons existants (déjà dans la feuille pour date/équipe)
+  msg.textContent="Vérifications..."; msg.className="muted";
+  try{
+    const exist = await apiGet({ get:"besoinsEquipe", date:d, equipe:eq });
+    const existSet = new Set((exist?.materiels||[]).map(x=>x.toString()));
+    const inter = rows.map(r=>r.materiel).filter(m=> existSet.has(m));
+    if (inter.length){
+      msg.textContent = "Déjà saisis pour cette date/équipe : " + inter.join(", ") + ". Retirez-les ou changez la date.";
+      msg.className="error"; return;
+    }
+  }catch(e){ /* on continue même si l'alerte serveur échoue */ }
+
+  // Enregistrement
+  msg.textContent="Enregistrement..."; msg.className="muted";
+  try{
+    const payload = encodeURIComponent(JSON.stringify(rows));
+    const r = await apiGet({ action:"addBesoinsBatch", date: d, equipe: eq, lignes: payload });
+    msg.textContent = typeof r==="string" ? r : "Besoins enregistrés.";
+    msg.className="ok";
+  }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
+});
+
 
   // Snapshot Restes Zones
   document.getElementById("btnSnapshot")?.addEventListener("click", async () => {
