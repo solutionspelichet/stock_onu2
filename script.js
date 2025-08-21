@@ -1,7 +1,10 @@
 // Frontend logic + Aperçu Réappro + Restes équipe (zone override) + Besoins batch + Legacy multi-matériels
+// Améliorations : anti-doublons besoins, export CSV plan J+1, verrou snapshot.
 // Dates J+1 par défaut (besoins & plan). Zone par défaut = nom de l'équipe.
+
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
+// ───────── API
 async function apiGet(params) {
   const url = APP_SCRIPT_URL + "?" + new URLSearchParams(params).toString();
   const res = await fetch(url, { method: "GET" });
@@ -10,40 +13,16 @@ async function apiGet(params) {
   return res.text();
 }
 
-// Dates helpers
+// ───────── Dates helpers
 function setToday(id){const el=document.getElementById(id); if(el) el.value=new Date().toISOString().slice(0,10);}
 function setTomorrow(id){const el=document.getElementById(id); if(!el) return; const d=new Date(); d.setDate(d.getDate()+1); el.value=d.toISOString().slice(0,10);}
 
+// ───────── DOM helpers
 function toTable(h,rows){
   const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead>";
   const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
   return `<table>${th+tb}</table>`;
 }
-
-let LAST_PLAN = null;
-
-function toCSV(headers, rows){
-  const esc = v => {
-    const s = (v==null? "" : String(v));
-    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-  };
-  const head = headers.map(esc).join(";");                // ; pour Excel fr
-  const body = rows.map(r => r.map(esc).join(";")).join("\n");
-  const csv = "\uFEFF" + head + "\n" + body;              // BOM UTF-8
-  return csv;
-}
-function downloadCSV(filename, csv){
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  URL.revokeObjectURL(link.href);
-  link.remove();
-}
-
-
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
   const panels = document.querySelectorAll('.tab-panel');
@@ -60,6 +39,7 @@ function initTabs() {
 let _matsList = [];
 let _zonesList = [];
 let _cacheEquipeInfo = new Map();
+let LAST_PLAN = null; // pour export CSV
 
 function buildMatSelect(value=""){
   const sel = document.createElement('select');
@@ -74,7 +54,7 @@ function buildZoneSelect(value=""){
   return sel;
 }
 
-// ── Legacy rows
+// ───────── Lignes Legacy / Besoins / Restes
 function addLegacyRow(value="", qty=""){
   const tbody = document.getElementById('legacyItems');
   const tr = document.createElement('tr');
@@ -86,8 +66,6 @@ function addLegacyRow(value="", qty=""){
   tr.appendChild(tdMat); tr.appendChild(tdQty); tr.appendChild(tdRm);
   tbody.appendChild(tr);
 }
-
-// ── Besoins batch rows
 function addBesoinsRow(value="", cible="", comment=""){
   const tbody = document.getElementById('besoinsRows');
   const tr = document.createElement('tr');
@@ -100,8 +78,6 @@ function addBesoinsRow(value="", cible="", comment=""){
   tr.appendChild(tdMat); tr.appendChild(tdC); tr.appendChild(tdCom); tr.appendChild(tdRm);
   tbody.appendChild(tr);
 }
-
-// ── Restes rows
 function addRestesRow(value="", qty=""){
   const tbody = document.getElementById('restesRows');
   const tr = document.createElement('tr');
@@ -114,7 +90,7 @@ function addRestesRow(value="", qty=""){
   tbody.appendChild(tr);
 }
 
-// ── Aperçu dynamique (Réappro J+1)
+// ───────── Aperçu dynamique (Réappro J+1)
 function ensurePreviewBox(){
   if (document.getElementById("besoinApercu")) return;
   const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
@@ -153,6 +129,7 @@ function ensurePreviewBox(){
   card.appendChild(batch);
 }
 
+// ───────── API helpers
 async function getEquipeInfo(equipe){
   if (_cacheEquipeInfo.has(equipe)) return _cacheEquipeInfo.get(equipe);
   const info = await apiGet({ get: "infoEquipe", equipe });
@@ -166,6 +143,7 @@ async function getReste(zone, materiel, dateStr){
 }
 function debounce(fn, ms=250){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
+// ───────── Aperçu Besoins (calcul instantané besoin estimé)
 const updatePreview = debounce(async ()=>{
   const box = document.getElementById("besoinApercu"); if (!box) return;
   const d = document.getElementById("besoinDate")?.value || "";
@@ -266,6 +244,28 @@ async function initLists() {
   if (tbodyBesoins && !tbodyBesoins.children.length) addBesoinsRow();
 }
 
+// ───────── CSV Export helpers
+function toCSV(headers, rows){
+  const esc = v => {
+    const s = (v==null? "" : String(v));
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  const head = headers.map(esc).join(";");                // ";" pour Excel fr
+  const body = rows.map(r => r.map(esc).join(";")).join("\n");
+  const csv = "\uFEFF" + head + "\n" + body;              // BOM UTF-8
+  return csv;
+}
+function downloadCSV(filename, csv){
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  URL.revokeObjectURL(link.href);
+  link.remove();
+}
+
 // ───────── Events
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
@@ -292,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Besoins J+1 (unitaire) → ajoute à la liste
+  // Besoins J+1 (unitaire) → ajoute à la liste (en local, NON enregistré)
   document.getElementById("btnAddBesoin")?.addEventListener("click", () => {
     const mat=document.getElementById("besoinMateriel")?.value||"";
     const cible=(document.getElementById("besoinCible")?.value||"").trim();
@@ -305,56 +305,58 @@ document.addEventListener("DOMContentLoaded", () => {
     msg.textContent="Ligne ajoutée à la liste ci-dessous (non enregistrée)."; msg.className="muted";
   });
 
-  // Besoins J+1 (batch multi-lignes) — envoi
+  // Besoins J+1 (batch multi-lignes) — ajout d'une ligne
   document.getElementById("btnBesoinsAddLine")?.addEventListener("click", ()=> addBesoinsRow());
+
+  // Besoins J+1 (batch multi-lignes) — enregistrement AVEC anti-doublons
   document.getElementById("btnBesoinsSave")?.addEventListener("click", async ()=>{
-  const d = document.getElementById('besoinDate')?.value;
-  const eq = document.getElementById('besoinEquipe')?.value;
-  const msg = document.getElementById('besoinsMsg');
-  if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
+    const d = document.getElementById('besoinDate')?.value;
+    const eq = document.getElementById('besoinEquipe')?.value;
+    const msg = document.getElementById('besoinsMsg');
+    if(!d||!eq){ msg.textContent="Choisissez d'abord la date et l'équipe."; msg.className="error"; return; }
 
-  // Lire les lignes saisies
-  const rows = Array.from(document.querySelectorAll('#besoinsRows tr')).map(tr=>({
-    materiel: tr.querySelector('select')?.value || '',
-    cible: parseInt(tr.querySelector('input[type=number]')?.value||'0',10) || 0,
-    commentaire: tr.querySelector('input[type=text]')?.value || ''
-  })).filter(r=> (r.materiel||"").trim() !== '' && r.cible>0);
-  if (rows.length===0){ msg.textContent="Ajoutez au moins une ligne (cible > 0)."; msg.className="error"; return; }
+    // Lire les lignes saisies
+    const rows = Array.from(document.querySelectorAll('#besoinsRows tr')).map(tr=>({
+      materiel: tr.querySelector('select')?.value || '',
+      cible: parseInt(tr.querySelector('input[type=number]')?.value||'0',10) || 0,
+      commentaire: tr.querySelector('input[type=text]')?.value || ''
+    })).filter(r=> (r.materiel||"").trim() !== '' && r.cible>0);
+    if (rows.length===0){ msg.textContent="Ajoutez au moins une ligne (cible > 0)."; msg.className="error"; return; }
 
-  // Doublons dans la saisie (même matériel répété)
-  const seen = new Set(); const dups = [];
-  rows.forEach(r=>{ if(seen.has(r.materiel)) dups.push(r.materiel); else seen.add(r.materiel); });
-  if (dups.length){
-    msg.textContent = "Doublons dans la saisie : " + [...new Set(dups)].join(", ") + ". Supprimez-les avant d'enregistrer.";
-    msg.className="error"; return;
-  }
-
-  // Doublons existants (déjà dans la feuille pour date/équipe)
-  msg.textContent="Vérifications..."; msg.className="muted";
-  try{
-    const exist = await apiGet({ get:"besoinsEquipe", date:d, equipe:eq });
-    const existSet = new Set((exist?.materiels||[]).map(x=>x.toString()));
-    const inter = rows.map(r=>r.materiel).filter(m=> existSet.has(m));
-    if (inter.length){
-      msg.textContent = "Déjà saisis pour cette date/équipe : " + inter.join(", ") + ". Retirez-les ou changez la date.";
+    // Doublons dans la saisie (même matériel répété)
+    const seen = new Set(); const dups = [];
+    rows.forEach(r=>{ if(seen.has(r.materiel)) dups.push(r.materiel); else seen.add(r.materiel); });
+    if (dups.length){
+      msg.textContent = "Doublons dans la saisie : " + [...new Set(dups)].join(", ") + ". Supprimez-les avant d'enregistrer.";
       msg.className="error"; return;
     }
-  }catch(e){ /* on continue même si l'alerte serveur échoue */ }
 
-  // Enregistrement
-  msg.textContent="Enregistrement..."; msg.className="muted";
-  try{
-    const payload = encodeURIComponent(JSON.stringify(rows));
-    const r = await apiGet({ action:"addBesoinsBatch", date: d, equipe: eq, lignes: payload });
-    msg.textContent = typeof r==="string" ? r : "Besoins enregistrés.";
-    msg.className="ok";
-  }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
-});
+    // Doublons déjà présents dans la feuille pour date/équipe
+    msg.textContent="Vérifications..."; msg.className="muted";
+    try{
+      const exist = await apiGet({ get:"besoinsEquipe", date:d, equipe:eq });
+      const existSet = new Set((exist?.materiels||[]).map(x=>x.toString()));
+      const inter = rows.map(r=>r.materiel).filter(m=> existSet.has(m));
+      if (inter.length){
+        msg.textContent = "Déjà saisis pour cette date/équipe : " + inter.join(", ") + ". Retirez-les ou changez la date.";
+        msg.className="error"; return;
+      }
+    }catch(e){ /* on continue même si la vérification échoue */ }
 
+    // Enregistrement
+    msg.textContent="Enregistrement..."; msg.className="muted";
+    try{
+      const payload = encodeURIComponent(JSON.stringify(rows));
+      const r = await apiGet({ action:"addBesoinsBatch", date: d, equipe: eq, lignes: payload });
+      msg.textContent = typeof r==="string" ? r : "Besoins enregistrés.";
+      msg.className="ok";
+    }catch(e){ msg.textContent="Erreur: "+e.message; msg.className="error"; }
+  });
 
-  // Snapshot Restes Zones
+  // Snapshot Restes Zones (respect du verrou côté serveur)
   document.getElementById("btnSnapshot")?.addEventListener("click", async () => {
-    const d=snapshotDate.value, m=snapshotMsg; m.textContent="Snapshot en cours..."; m.className="muted";
+    const d=document.getElementById("snapshotDate")?.value, m=document.getElementById("snapshotMsg");
+    m.textContent="Snapshot en cours..."; m.className="muted";
     if(!d){m.textContent="Choisissez une date."; m.className="error"; return;}
     try{const r=await apiGet({action:"snapshotRestes", date:d}); m.textContent=(typeof r==="string"?r:"Snapshot effectué"); m.className="ok";}
     catch(e){m.textContent="Erreur: "+e.message; m.className="error";}
@@ -362,7 +364,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Calcul du plan J+1 (utilise restes de J)
   document.getElementById("btnCalculerPlan")?.addEventListener("click", async () => {
-    const d=planDate.value, a=aggContainer, t=detailContainer, b=btnGenererMouvements;
+    const dateInput = document.getElementById("planDate");
+    const d=dateInput?.value;
+    const a=document.getElementById("aggContainer");
+    const t=document.getElementById("detailContainer");
+    const b=document.getElementById("btnGenererMouvements");
+    const exportBtn = document.getElementById("btnExportPlan");
+
+    LAST_PLAN = null;
+    exportBtn && (exportBtn.disabled = true);
+
     if(!d){a.textContent="Veuillez sélectionner une date."; t.textContent=""; b.disabled=true; return;}
     a.textContent="Calcul en cours..."; t.textContent=""; b.disabled=true;
 
@@ -383,6 +394,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if(r.details.length){ t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details); }
         else { t.textContent="Aucune ligne de besoins pour cette date (vérifiez la saisie dans « Besoins J+1 (Saisie) »)."; }
       } else { t.textContent=""; }
+
+      LAST_PLAN = r || null;
+      if (exportBtn) {
+        const hasRows = (r && ((r.agregat&&r.agregat.length) || (r.details&&r.details.length)));
+        exportBtn.disabled = !hasRows;
+      }
     }catch(e){
       a.textContent="Erreur: "+e.message; t.textContent=""; meta.textContent="";
     }
@@ -390,7 +407,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Génération des mouvements VC → Bibliothèque
   document.getElementById("btnGenererMouvements")?.addEventListener("click", async () => {
-    const d=planDate.value, a=aggContainer; if(!d)return;
+    const d=document.getElementById("planDate")?.value, a=document.getElementById("aggContainer"); if(!d)return;
     a.textContent="Génération des mouvements en cours...";
     try{const r=await apiGet({action:"genererReappro", date:d}); a.innerHTML=`<p class="ok">${typeof r==="string"?r:JSON.stringify(r)}</p>`;}
     catch(e){a.innerHTML=`<p class="error">Erreur: ${e.message}</p>`;}
@@ -400,7 +417,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('btnLegacyAddLine')?.addEventListener('click', ()=> addLegacyRow());
   document.getElementById('btnLegacySave')?.addEventListener('click', async ()=>{
     const msg = document.getElementById('legacyMsg'); msg.textContent="Enregistrement..."; msg.className="muted";
-    const d=legacyDate.value, type=legacyType.value, feuille=legacyFeuille.value, zone=legacyZone.value;
+    const d=document.getElementById("legacyDate")?.value, type=document.getElementById("legacyType")?.value, feuille=document.getElementById("legacyFeuille")?.value, zone=document.getElementById("legacyZone")?.value;
     const rows = Array.from(document.querySelectorAll('#legacyItems tr')).map(tr=>({
       materiel: tr.querySelector('select')?.value || '',
       quantite: parseInt(tr.querySelector('input')?.value||'0',10) || 0
@@ -416,7 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch(e){ msg.textContent='Erreur: '+e.message; msg.className='error'; }
   });
 
-  // État des stocks par zone
+  // État des stocks par zone (onglet avancé)
   document.getElementById("btnChargerEtat")?.addEventListener("click", async ()=>{
     const z = document.getElementById("etatZone")?.value;
     const cont = document.getElementById("etatTable");
@@ -482,7 +499,58 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById(id)?.addEventListener("input", updatePreview);
   });
 
-  // Init listes
+  // Ajouter le bouton Exporter (CSV) à côté de "Générer les mouvements"
+  const genBtn = document.getElementById("btnGenererMouvements");
+  if (genBtn && !document.getElementById("btnExportPlan")) {
+    const exportBtn = document.createElement("button");
+    exportBtn.id = "btnExportPlan";
+    exportBtn.className = "secondary";
+    exportBtn.textContent = "Exporter (CSV)";
+    exportBtn.disabled = true;
+    genBtn.parentNode.insertBefore(exportBtn, genBtn); // avant le bouton générer
+
+    exportBtn.addEventListener("click", ()=>{
+      if (!LAST_PLAN) return;
+      const d = document.getElementById("planDate")?.value || LAST_PLAN.date || "plan";
+      if (LAST_PLAN.agregat && LAST_PLAN.agregat.length){
+        const csvAgg = toCSV(["Date","Matériel","QuantitéÀPrélever"], LAST_PLAN.agregat);
+        downloadCSV(`plan_J+1_agregat_${d}.csv`, csvAgg);
+      }
+      if (LAST_PLAN.details && LAST_PLAN.details.length){
+        const csvDet = toCSV(["Date","Équipe","Zone","Matériel","RestesVeille","CibleDemain","BesoinRéappro"], LAST_PLAN.details);
+        downloadCSV(`plan_J+1_details_${d}.csv`, csvDet);
+      }
+    });
+  }
+
+  // Switch "Verrou snapshot" (UI → Paramètres.SNAPSHOT_LOCK)
+  const snapshotBtn = document.getElementById("btnSnapshot");
+  if (snapshotBtn && !document.getElementById("snapshotLock")) {
+    const wrap = document.createElement("div");
+    wrap.style.display="flex"; wrap.style.alignItems="center"; wrap.style.gap="8px"; wrap.style.marginLeft="8px";
+
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.id = "snapshotLock";
+    const lbl = document.createElement("label"); lbl.htmlFor = "snapshotLock"; lbl.className="muted"; lbl.textContent = "Verrou snapshot";
+
+    snapshotBtn.parentNode.insertBefore(wrap, snapshotBtn.nextSibling);
+    wrap.appendChild(chk); wrap.appendChild(lbl);
+
+    // État initial
+    apiGet({ get:"snapshotLock" }).then(r=>{
+      chk.checked = r && r.lock === "1";
+    });
+
+    // Toggle
+    chk.addEventListener("change", async ()=>{
+      try { await apiGet({ action:"setSnapshotLock", on: chk.checked ? "1" : "0" }); }
+      catch(e){ chk.checked = !chk.checked; alert("Impossible de changer le verrou: "+e.message); }
+    });
+  }
+
+  // Init listes puis premier aperçu
   initLists().then(updatePreview);
+
+  // PWA
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
 });
