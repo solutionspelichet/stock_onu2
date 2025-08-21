@@ -1,5 +1,5 @@
 // Frontend logic + Aperçu Réappro + Restes équipe (zone override) + Besoins batch + Legacy multi-matériels
-// Améliorations : anti-doublons besoins, export CSV plan J+1, verrou snapshot.
+// Améliorations : anti-doublons besoins, export XLSX du plan J+1, verrou snapshot.
 // Dates J+1 par défaut (besoins & plan). Zone par défaut = nom de l'équipe.
 
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
@@ -39,7 +39,7 @@ function initTabs() {
 let _matsList = [];
 let _zonesList = [];
 let _cacheEquipeInfo = new Map();
-let LAST_PLAN = null; // pour export CSV
+let LAST_PLAN = null; // pour export XLSX
 
 function buildMatSelect(value=""){
   const sel = document.createElement('select');
@@ -141,7 +141,7 @@ async function getReste(zone, materiel, dateStr){
   if (r && typeof r === "object" && "quantite" in r) return r;
   return { quantite: 0, source: "Aucun" };
 }
-function debounce(fn, ms=250){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
+function debounce(fn, ms=200){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
 // ───────── Aperçu Besoins (calcul instantané besoin estimé)
 const updatePreview = debounce(async ()=>{
@@ -244,26 +244,54 @@ async function initLists() {
   if (tbodyBesoins && !tbodyBesoins.children.length) addBesoinsRow();
 }
 
-// ───────── CSV Export helpers
-function toCSV(headers, rows){
-  const esc = v => {
-    const s = (v==null? "" : String(v));
-    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-  };
-  const head = headers.map(esc).join(";");                // ";" pour Excel fr
-  const body = rows.map(r => r.map(esc).join(";")).join("\n");
-  const csv = "\uFEFF" + head + "\n" + body;              // BOM UTF-8
-  return csv;
+// ───────── SheetJS loader & export XLSX
+let _sheetjsPromise = null;
+function ensureXLSXLoaded(){
+  if (window.XLSX) return Promise.resolve();
+  if (_sheetjsPromise) return _sheetjsPromise;
+  _sheetjsPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.async = true;
+    s.onload = ()=> resolve();
+    s.onerror = ()=> reject(new Error("Impossible de charger SheetJS."));
+    document.head.appendChild(s);
+  });
+  return _sheetjsPromise;
 }
-function downloadCSV(filename, csv){
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  URL.revokeObjectURL(link.href);
-  link.remove();
+function aoaToSheetWithWidths(headers, rows){
+  const data = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  // Auto largeur simple : longueur max par colonne, min 8, max ~40
+  const colCount = headers.length;
+  const widths = new Array(colCount).fill(8);
+  data.forEach(r=>{
+    r.forEach((cell, idx)=>{
+      const len = (cell==null?0:String(cell)).length;
+      widths[idx] = Math.min(40, Math.max(widths[idx], len+2));
+    });
+  });
+  ws['!cols'] = widths.map(w=>({wch:w}));
+  return ws;
+}
+async function exportPlanXLSX(dateStr, plan){
+  await ensureXLSXLoaded();
+  const wb = XLSX.utils.book_new();
+
+  // Feuille Agrégat
+  const hAgg = ["Date","Matériel","QuantitéÀPrélever"];
+  const rowsAgg = (plan.agregat||[]);
+  const wsAgg = aoaToSheetWithWidths(hAgg, rowsAgg);
+  XLSX.utils.book_append_sheet(wb, wsAgg, "Agrégat");
+
+  // Feuille Détails
+  const hDet = ["Date","Équipe","Zone","Matériel","RestesVeille","CibleDemain","BesoinRéappro"];
+  const rowsDet = (plan.details||[]);
+  const wsDet = aoaToSheetWithWidths(hDet, rowsDet);
+  XLSX.utils.book_append_sheet(wb, wsDet, "Détails");
+
+  const fname = `plan_J+1_${dateStr||plan.date||"export"}.xlsx`;
+  XLSX.writeFile(wb, fname);
 }
 
 // ───────── Events
@@ -499,26 +527,23 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById(id)?.addEventListener("input", updatePreview);
   });
 
-  // Ajouter le bouton Exporter (CSV) à côté de "Générer les mouvements"
+  // Ajouter le bouton Exporter (XLSX) à côté de "Générer les mouvements"
   const genBtn = document.getElementById("btnGenererMouvements");
   if (genBtn && !document.getElementById("btnExportPlan")) {
     const exportBtn = document.createElement("button");
     exportBtn.id = "btnExportPlan";
     exportBtn.className = "secondary";
-    exportBtn.textContent = "Exporter (CSV)";
+    exportBtn.textContent = "Exporter (XLSX)";
     exportBtn.disabled = true;
     genBtn.parentNode.insertBefore(exportBtn, genBtn); // avant le bouton générer
 
-    exportBtn.addEventListener("click", ()=>{
+    exportBtn.addEventListener("click", async ()=>{
       if (!LAST_PLAN) return;
       const d = document.getElementById("planDate")?.value || LAST_PLAN.date || "plan";
-      if (LAST_PLAN.agregat && LAST_PLAN.agregat.length){
-        const csvAgg = toCSV(["Date","Matériel","QuantitéÀPrélever"], LAST_PLAN.agregat);
-        downloadCSV(`plan_J+1_agregat_${d}.csv`, csvAgg);
-      }
-      if (LAST_PLAN.details && LAST_PLAN.details.length){
-        const csvDet = toCSV(["Date","Équipe","Zone","Matériel","RestesVeille","CibleDemain","BesoinRéappro"], LAST_PLAN.details);
-        downloadCSV(`plan_J+1_details_${d}.csv`, csvDet);
+      try{
+        await exportPlanXLSX(d, LAST_PLAN);
+      }catch(e){
+        alert("Export XLSX impossible: " + e.message);
       }
     });
   }
