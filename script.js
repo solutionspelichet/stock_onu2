@@ -1,4 +1,4 @@
-// Frontend logic + Tabs + Aperçu Réappro + Restes par équipe (zone override) + Besoins batch + Legacy multi-matériels
+// Frontend logic + Aperçu Réappro + Restes équipe (zone override) + Besoins batch + Legacy multi-matériels
 const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 async function apiGet(params) {
@@ -9,8 +9,10 @@ async function apiGet(params) {
   return res.text();
 }
 
+// Dates helpers
 function setToday(id){const el=document.getElementById(id); if(el) el.value=new Date().toISOString().slice(0,10);}
 function setTomorrow(id){const el=document.getElementById(id); if(!el) return; const d=new Date(); d.setDate(d.getDate()+1); el.value=d.toISOString().slice(0,10);}
+
 function toTable(h,rows){
   const th="<thead><tr>"+h.map(x=>`<th>${x}</th>`).join("")+"</tr></thead>";
   const tb="<tbody>"+rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
@@ -93,6 +95,10 @@ function ensurePreviewBox(){
   const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
   if (!card) return;
 
+  // Renommer le bouton pour clarifier
+  const addBtn = document.getElementById("btnAddBesoin");
+  if (addBtn) addBtn.textContent = "Ajouter à la liste ci-dessous";
+
   // Aperçu
   const box = document.createElement('div');
   box.id = "besoinApercu";
@@ -120,6 +126,7 @@ function ensurePreviewBox(){
       <button id="btnBesoinsSave" class="secondary">Enregistrer ces besoins</button>
       <span id="besoinsMsg" class="muted"></span>
     </div>
+    <p class="muted" style="margin-top:8px;">Astuce : utilisez la ligne du dessus pour ajouter rapidement un item, puis cliquez “Enregistrer ces besoins”.</p>
   `;
   card.appendChild(batch);
 }
@@ -162,10 +169,10 @@ const updatePreview = debounce(async ()=>{
   }catch(e){ box.innerHTML = `<span class="error">Aperçu indisponible: ${e.message}</span>`; }
 }, 200);
 
-// ───────── UI Saisie Restes Équipe (injectée dans la carte "Clôture J")
+// ───────── UI Saisie Restes Équipe
 function ensureRestesUI(){
   if (document.getElementById("restesEquipe")) return;
-  const card = document.querySelector('#tab-reappro .card:nth-of-type(3)'); // carte "Clôture J"
+  const card = document.querySelector('#tab-reappro .card:nth-of-type(3)');
   if (!card) return;
 
   const wrap = document.createElement('div');
@@ -244,6 +251,9 @@ document.addEventListener("DOMContentLoaded", () => {
   ensurePreviewBox();
   ensureRestesUI();
 
+  // Par défaut : J+1 pour la saisie des besoins et le plan ; J pour la clôture
+  setTomorrow("besoinDate"); setTomorrow("planDate"); setToday("snapshotDate"); setToday("legacyDate");
+
   // Ping
   document.getElementById("btnPing")?.addEventListener("click", async () => {
     const s=document.getElementById("pingStatus"); if(s) s.textContent="Test en cours...";
@@ -251,19 +261,20 @@ document.addEventListener("DOMContentLoaded", () => {
     catch(e){ if(s){ s.textContent="Erreur de connexion"; s.className="error"; } }
   });
 
-  // Besoins J+1 (unitaire)
-  document.getElementById("btnAddBesoin")?.addEventListener("click", async () => {
-    const d=besoinDate.value, eq=besoinEquipe.value, m=besoinMateriel.value, c=besoinCible.value, com=besoinComment.value;
-    const msg=besoinMsg; msg.textContent="Ajout en cours..."; msg.className="muted";
-    if(!d||!eq||!m||!c){msg.textContent="Renseignez date, équipe, matériel et cible."; msg.className="error"; return;}
-    try{
-      const r=await apiGet({action:"addBesoins", date:d, equipe:eq, materiel:m, cible:c, commentaire:com});
-      msg.textContent=(typeof r==="string"?r:"Ajout effectué"); msg.className="ok"; besoinCible.value=""; besoinComment.value="";
-      updatePreview();
-    }catch(e){msg.textContent="Erreur: "+e.message; msg.className="error";}
+  // Besoins J+1 (unitaire) → ajoute à la liste (ne sauve plus directement)
+  document.getElementById("btnAddBesoin")?.addEventListener("click", () => {
+    const mat=document.getElementById("besoinMateriel")?.value||"";
+    const cible=(document.getElementById("besoinCible")?.value||"").trim();
+    const com=document.getElementById("besoinComment")?.value||"";
+    const msg=document.getElementById("besoinMsg");
+    if(!mat || !cible){ msg.textContent="Sélectionnez un matériel et saisissez une cible."; msg.className="error"; return; }
+    addBesoinsRow(mat, cible, com);
+    document.getElementById("besoinCible").value="";
+    document.getElementById("besoinComment").value="";
+    msg.textContent="Ligne ajoutée à la liste ci-dessous (non enregistrée)."; msg.className="muted";
   });
 
-  // Besoins J+1 (batch multi-lignes)
+  // Besoins J+1 (batch multi-lignes) — envoi
   document.getElementById("btnBesoinsAddLine")?.addEventListener("click", ()=> addBesoinsRow());
   document.getElementById("btnBesoinsSave")?.addEventListener("click", async ()=>{
     const d = document.getElementById('besoinDate')?.value;
@@ -304,15 +315,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try{
       const r=await apiGet({plan:"reappro", date:d});
+      if (r && r.error){ a.textContent="Erreur: "+r.error; t.textContent=""; meta.textContent=""; return; }
       meta.textContent = r && (r.veille || r.dateVeille) ? `Restes utilisés : ${r.veille || r.dateVeille} (veille)` : "";
 
       if(r&&r.agregat){ 
         if(r.agregat.length){ a.innerHTML=toTable(["Date","Matériel","Quantité À Prélever"], r.agregat); b.disabled=false; } 
-        else { a.textContent="Aucun besoin agrégé."; }
+        else { a.textContent="Aucun besoin agrégé pour cette date."; }
       } else { a.textContent="Aucune donnée."; }
 
-      if(r&&r.details){ t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details);} 
-      else { t.textContent=""; }
+      if(r&&r.details){ 
+        if(r.details.length){ t.innerHTML=toTable(["Date","Équipe","Zone","Matériel","Restes Veille","Cible Demain","Besoin Réappro"], r.details); }
+        else { t.textContent="Aucune ligne de besoins pour cette date (vérifiez la saisie dans « Besoins J+1 (Saisie) »)."; }
+      } else { t.textContent=""; }
     }catch(e){
       a.textContent="Erreur: "+e.message; t.textContent=""; meta.textContent="";
     }
@@ -412,9 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById(id)?.addEventListener("input", updatePreview);
   });
 
-  // Init
-  setToday("besoinDate"); setToday("snapshotDate"); setTomorrow("planDate"); setToday("legacyDate");
-  ensureRestesUI();
+  // Init listes
   initLists().then(updatePreview);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
 });
