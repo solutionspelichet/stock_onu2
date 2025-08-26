@@ -1,4 +1,30 @@
-<section id="tab-reappro" class="tab-panel">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <meta name="theme-color" content="#ff6a00" />
+  <title>ONU Suivi Stock — Pelichet</title>
+  <link rel="preload" href="fonts/pelichet.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="pelichet-theme">
+  <header class="app-header">
+    <h1>ONU — Suivi Stock</h1>
+    <div class="right">
+      <button id="btnReload" class="secondary">↻ Recharger</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-button active" data-tab="tab-reappro">Réappro</button>
+    <button class="tab-button" data-tab="tab-dashboard">Dashboard</button>
+    <button class="tab-button" data-tab="tab-avance">Fonctionnalités avancées</button>
+  </nav>
+
+  <main>
+    <!-- Onglet Réappro -->
+    <section id="tab-reappro" class="tab-panel">
   <div class="card">
     <h2>Besoins J+1 — Saisie</h2>
     <div class="grid grid-4 grid-sm-2 grid-xs-1">
@@ -68,3 +94,58 @@
     <div class="toolbar right"><button id="c_save" class="primary">Enregistrer les restes</button></div>
   </div>
 </section>
+
+
+    <!-- Onglet Dashboard -->
+    <section id="tab-dashboard" class="tab-panel hidden">
+      <div class="card">
+        <h2>Dashboard — Synthèse</h2>
+        <div class="grid grid-4 grid-sm-2 grid-xs-1">
+          <div><label>Jour J</label><input type="date" id="dashJ" /></div>
+          <div><label>Jour J+1</label><input type="date" id="dashJ1" /></div>
+          <div><label>Usage — du</label><input type="date" id="dashFrom" /></div>
+          <div><label>au</label><input type="date" id="dashTo" /></div>
+        </div>
+        <div class="toolbar wrap">
+          <button id="btnDashRefresh" class="primary">Actualiser</button>
+          <button id="btnDashExport" class="secondary">Exporter (XLSX)</button>
+          <span id="dashMsg" class="muted"></span>
+        </div>
+      </div>
+      <div class="kpis grid grid-3 grid-sm-2 grid-xs-1">
+        <div class="kpi"><div class="kpi-title">Stock VC (articles)</div><div id="kpi-vc" class="kpi-value">—</div></div>
+        <div class="kpi"><div class="kpi-title">Entrées Biblio (J)</div><div id="kpi-bibj" class="kpi-value">—</div></div>
+        <div class="kpi"><div class="kpi-title">Répartition (J)</div><div id="kpi-repj" class="kpi-value">—</div></div>
+      </div>
+      <div class="card"><h3>Stock Voie Creuse (J)</h3><div id="dashStockVC" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Entrées du jour à Bibliothèque (J)</h3><div id="dashEntBibJ" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Entrées J+1 à Bibliothèque — Plan</h3><div id="dashEntBibJ1Plan" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Entrées J+1 à Bibliothèque — Réel</h3><div id="dashEntBibJ1Real" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Répartition du jour vers équipes (J)</h3><div id="dashRepartJ" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Besoins J+1 par équipe</h3><div id="dashBesoinsEqJ1" class="table-wrap scroll-x">—</div></div>
+      <div class="card"><h3>Consommation — par jour & par équipe</h3><div id="dashUsage" class="table-wrap scroll-x">—</div></div>
+    </section>
+
+    <!-- Onglet Avancé -->
+    <section id="tab-avance" class="tab-panel hidden">
+      <div class="card">
+        <h2>Fonctionnalités avancées</h2>
+        <div class="grid grid-3 grid-sm-2 grid-xs-1">
+          <div><label>Zone (État des stocks par zone)</label><input type="text" id="a_zone" placeholder="Ex: Bibliothèque ou équipe 1" /></div>
+          <div class="align-end"><button id="a_etat" class="primary">Charger</button></div>
+        </div>
+        <div id="a_etat_table" class="table-wrap scroll-x">—</div>
+      </div>
+      <div class="card">
+        <h3>Export / Snapshot</h3>
+        <div class="toolbar wrap">
+          <button id="a_export_xlsx" class="secondary">Exporter (XLSX)</button>
+          <button id="a_snapshot" class="secondary">Snapshot Restes (J)</button>
+          <label class="switch"><input type="checkbox" id="a_lock" /><span>Verrou Snapshot</span></label>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
