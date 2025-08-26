@@ -22,10 +22,20 @@ function escapeHtml(x) {
 async function apiGet(params) {
   const url = new URL(API_BASE_URL);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url.toString(), { method: "GET" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return await r.json();
+  const resp = await fetch(url.toString(), { method: "GET" });
+
+  const text = await resp.text(); // on lit le texte brut d'abord
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
+  }
+  try {
+    return JSON.parse(text);      // on tente de parser en JSON
+  } catch {
+    // Backend a renvoyé du texte ("Paramètre inconnu", etc.)
+    throw new Error(text);
+  }
 }
+
 async function apiText(params) {
   const url = new URL(API_BASE_URL);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
