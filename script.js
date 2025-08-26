@@ -225,7 +225,6 @@ function ensureRestesUI() {
   const wrap = document.createElement('div');
   wrap.style.marginTop = "14px";
   wrap.innerHTML = `
-    <h3 style="margin:8px 0;">Saisie détaillée des restes – par équipe (J)</h3>
     <div class="row-3">
       <div>
         <label>Équipe</label>
@@ -384,6 +383,23 @@ document.addEventListener("DOMContentLoaded", () => {
   ensureRestesUI();
   ensureUsageUI();
 
+  // Bouton "Options avancées" pour afficher/masquer le snapshot (masqué par défaut)
+  const snapCard = document.getElementById("snapshotCard");
+  if (snapCard) {
+    snapCard.style.display = "none";
+    const advBtn = document.createElement("button");
+    advBtn.textContent = "Options avancées";
+    advBtn.className = "secondary";
+    advBtn.style.marginBottom = "10px";
+    const parent = snapCard.parentNode;
+    parent.insertBefore(advBtn, snapCard);
+    advBtn.addEventListener("click", () => {
+      const isHidden = snapCard.style.display === "none";
+      snapCard.style.display = isHidden ? "" : "none";
+      advBtn.textContent = isHidden ? "Masquer les options avancées" : "Options avancées";
+    });
+  }
+
   // Par défaut
   setTomorrow("besoinDate");
   setTomorrow("planDate");
@@ -396,7 +412,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const iFrom = document.getElementById("usageFrom"); if (iFrom) iFrom.value = tzToday;
   const iTo = document.getElementById("usageTo"); if (iTo) iTo.value = tzToday;
 
-  // Quand on change d’équipe dans Clôture J, caler la zone sur le nom de l’équipe
+  // Clôture J : zone = équipe au changement
   document.getElementById("restesEquipe")?.addEventListener("change", () => {
     const zSel = document.getElementById("restesZone");
     const eq = document.getElementById("restesEquipe").value;
@@ -525,7 +541,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch (e) { a.innerHTML = `<p class="error">Erreur: ${e.message}</p>`; }
   });
 
-  // Bouton Export Plan
+  // Bouton Export Plan (injection)
   const genBtn = document.getElementById("btnGenererMouvements");
   if (genBtn && !document.getElementById("btnExportPlan")) {
     const exportBtn = document.createElement("button");
@@ -661,7 +677,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) { msg.textContent = "Erreur: " + e.message; msg.className = "error"; }
   });
 
-  // Liens d’aperçu (mise à jour dynamique)
+  // Aperçu besoins dynamique
   ["besoinDate", "besoinEquipe", "besoinMateriel", "besoinCible"].forEach(id => {
     document.getElementById(id)?.addEventListener("change", updatePreview);
     document.getElementById(id)?.addEventListener("input", updatePreview);
@@ -728,7 +744,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnCalculerUsage")?.click();
   });
 
-  // Usage: Export XLSX (reprend la vue affichée)
+  // Usage: Export XLSX
   document.getElementById("btnExportUsage")?.addEventListener("click", async () => {
     if (!LAST_USAGE) return;
     const from = document.getElementById("usageFrom")?.value || LAST_USAGE.from || "from";
