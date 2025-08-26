@@ -23,80 +23,76 @@
   </nav>
 
   <main>
-    <!-- Onglet Réappro -->
+    <!-- ================== RéAPPRO ================== -->
     <section id="tab-reappro" class="tab-panel">
-  <div class="card">
-    <h2>Besoins J+1 — Saisie</h2>
-    <div class="grid grid-4 grid-sm-2 grid-xs-1">
-      <div>
-        <label>Jour J+1</label>
-        <input type="date" id="b_j1">
+      <!-- Besoins J+1 -->
+      <div class="card">
+        <h2>Besoins J+1 — Saisie</h2>
+        <div class="grid grid-4 grid-sm-2 grid-xs-1">
+          <div>
+            <label>Jour J+1</label>
+            <input type="date" id="b_j1">
+          </div>
+          <div>
+            <label>Équipe</label>
+            <select id="b_equipe"></select>
+          </div>
+          <div class="align-end">
+            <button id="b_add_row" class="secondary">+ Ajouter une ligne</button>
+          </div>
+          <div class="align-end right">
+            <button id="b_save" class="primary">Enregistrer les besoins</button>
+          </div>
+        </div>
+        <div class="table-wrap scroll-x" style="margin-top:10px;">
+          <table id="b_table">
+            <thead>
+              <tr>
+                <th style="min-width:220px;">Matériel</th>
+                <th style="min-width:120px;">Cible (quantité)</th>
+                <th style="min-width:200px;">Commentaire</th>
+                <th>—</th>
+              </tr>
+            </thead>
+            <tbody><!-- lignes dynamiques --></tbody>
+          </table>
+        </div>
+        <p class="muted">Ajoute toutes les lignes pour la même équipe puis clique “Enregistrer les besoins”.</p>
       </div>
-      <div>
-        <label>Équipe</label>
-        <select id="b_equipe"></select>
-      </div>
-      <div class="align-end">
-        <button id="b_add_row" class="secondary">+ Ajouter une ligne</button>
-      </div>
-      <div class="align-end right">
-        <button id="b_save" class="primary">Enregistrer les besoins</button>
-      </div>
-    </div>
-    <div class="table-wrap scroll-x" style="margin-top:10px;">
-      <table id="b_table">
-        <thead>
-          <tr>
-            <th style="min-width:220px;">Matériel</th>
-            <th style="min-width:120px;">Cible (quantité)</th>
-            <th style="min-width:200px;">Commentaire</th>
-            <th>—</th>
-          </tr>
-        </thead>
-        <tbody><!-- lignes dynamiques --></tbody>
-      </table>
-    </div>
-    <p class="muted">Astuce : ajoute plusieurs lignes pour la même équipe puis “Enregistrer les besoins”.</p>
-  </div>
 
-  <div class="card">
-    <h2>Plan J+1 — Calcul / Mouvements</h2>
-    <div class="grid grid-4 grid-sm-2 grid-xs-1">
-      <div>
-        <label>Jour J</label>
-        <input type="date" id="r_jour" />
+      <!-- Plan J+1 + Mouvements -->
+      <div class="card">
+        <h2>Plan J+1 — Calcul / Mouvements</h2>
+        <div class="grid grid-4 grid-sm-2 grid-xs-1">
+          <div><label>Jour J</label><input type="date" id="r_jour"></div>
+          <div><label>Jour J+1</label><input type="date" id="r_jour1"></div>
+          <div class="stretch"></div>
+          <div class="align-end right">
+            <button id="r_calc" class="primary">Calculer le plan</button>
+            <button id="r_gen_vc_bib">VC → Bibliothèque</button>
+            <button id="r_distribuer">Bibliothèque → Équipes</button>
+          </div>
+        </div>
+        <div class="row-2">
+          <div><h3>Détails (par équipe)</h3><div id="r_details" class="table-wrap scroll-x">—</div></div>
+          <div><h3>Agrégat (VC→Biblio)</h3><div id="r_agregat" class="table-wrap scroll-x">—</div></div>
+        </div>
       </div>
-      <div>
-        <label>Jour J+1</label>
-        <input type="date" id="r_jour1" />
+
+      <!-- Clôture J -->
+      <div class="card">
+        <h2>Clôture J — Restes d'équipe</h2>
+        <div class="grid grid-3 grid-sm-2 grid-xs-1">
+          <div><label>Date (J)</label><input type="date" id="c_date" /></div>
+          <div><label>Équipe</label><select id="c_equipe"></select></div>
+          <div><label>Zone (auto = équipe)</label><input type="text" id="c_zone" placeholder="auto" /></div>
+        </div>
+        <textarea id="c_csv" rows="6" class="monospace" placeholder="Matériel, Quantité"></textarea>
+        <div class="toolbar right"><button id="c_save" class="primary">Enregistrer les restes</button></div>
       </div>
-      <div class="stretch"></div>
-      <div class="align-end right">
-        <button id="r_calc" class="primary">Calculer le plan</button>
-        <button id="r_gen_vc_bib">VC → Bibliothèque</button>
-        <button id="r_distribuer">Bibliothèque → Équipes</button>
-      </div>
-    </div>
-    <div class="row-2">
-      <div><h3>Détails (par équipe)</h3><div id="r_details" class="table-wrap scroll-x">—</div></div>
-      <div><h3>Agrégat (VC→Biblio)</h3><div id="r_agregat" class="table-wrap scroll-x">—</div></div>
-    </div>
-  </div>
+    </section>
 
-  <div class="card">
-    <h2>Clôture J — Restes d'équipe</h2>
-    <div class="grid grid-3 grid-sm-2 grid-xs-1">
-      <div><label>Date (J)</label><input type="date" id="c_date" /></div>
-      <div><label>Équipe</label><select id="c_equipe"></select></div>
-      <div><label>Zone (auto = équipe)</label><input type="text" id="c_zone" placeholder="auto" /></div>
-    </div>
-    <textarea id="c_csv" rows="6" class="monospace" placeholder="Matériel, Quantité"></textarea>
-    <div class="toolbar right"><button id="c_save" class="primary">Enregistrer les restes</button></div>
-  </div>
-</section>
-
-
-    <!-- Onglet Dashboard -->
+    <!-- ================== DASHBOARD ================== -->
     <section id="tab-dashboard" class="tab-panel hidden">
       <div class="card">
         <h2>Dashboard — Synthèse</h2>
@@ -126,7 +122,7 @@
       <div class="card"><h3>Consommation — par jour & par équipe</h3><div id="dashUsage" class="table-wrap scroll-x">—</div></div>
     </section>
 
-    <!-- Onglet Avancé -->
+    <!-- ================== AVANCÉ ================== -->
     <section id="tab-avance" class="tab-panel hidden">
       <div class="card">
         <h2>Fonctionnalités avancées</h2>
@@ -146,6 +142,7 @@
       </div>
     </section>
   </main>
+
   <script src="script.js"></script>
 </body>
 </html>
