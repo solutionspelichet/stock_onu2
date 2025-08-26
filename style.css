@@ -112,3 +112,8 @@ thead th {position:sticky; top:0; background:color-mix(in oklab, var(--panel-2) 
   .tab-button{padding:8px 12px}
   .app-header{padding:8px 12px}
 }
+/* Onglets : cache les panneaux non actifs */
+.tab-panel.hidden { display: none; }
+
+/* (optionnel) s'assure qu'on voit le panneau actif */
+.tab-panel { display: block; }
