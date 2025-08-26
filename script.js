@@ -191,7 +191,6 @@ async function getReste(zone, materiel, dateStr) {
 }
 function debounce(fn, ms = 200) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
 
-// Aperçu dynamique
 const updatePreview = debounce(async () => {
   const box = document.getElementById("besoinApercu"); if (!box) return;
   const d = document.getElementById("besoinDate")?.value || "";
@@ -456,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
         msg.textContent = "Déjà saisis pour cette date/équipe : " + inter.join(", ") + ". Retirez-les ou changez la date.";
         msg.className = "error"; return;
       }
-    } catch (e) { /* on continue même si la vérification échoue */ }
+    } catch (e) { /* continue même si la vérif échoue */ }
 
     // Enregistrement
     msg.textContent = "Enregistrement..."; msg.className = "muted";
@@ -537,6 +536,28 @@ document.addEventListener("DOMContentLoaded", () => {
       const d = document.getElementById("planDate")?.value || LAST_PLAN.date || "plan";
       try { await exportPlanXLSX(d, LAST_PLAN); }
       catch (e) { alert("Export XLSX impossible: " + e.message); }
+    });
+  }
+
+  // ➜ NOUVEAU : Bouton "Distribuer vers équipes" (alimente Répartition Journalière)
+  if (genBtn && !document.getElementById("btnDistribuerPlan")) {
+    const distribBtn = document.createElement("button");
+    distribBtn.id = "btnDistribuerPlan";
+    distribBtn.textContent = "Distribuer vers équipes";
+    distribBtn.className = "secondary";
+    genBtn.parentNode.insertBefore(distribBtn, genBtn.nextSibling);
+
+    distribBtn.addEventListener("click", async () => {
+      const d = document.getElementById("planDate")?.value;
+      const a = document.getElementById("aggContainer");
+      if (!d) { alert("Choisis une date de plan d'abord."); return; }
+      try {
+        a.textContent = "Distribution en cours...";
+        const r = await apiGet({ action: "distribuerPlan", date: d });
+        a.innerHTML = `<p class="${String(r).startsWith('0 ligne') ? 'error' : 'ok'}">${typeof r === "string" ? r : JSON.stringify(r)}</p>`;
+      } catch (e) {
+        a.innerHTML = `<p class="error">Erreur distribution: ${e.message}</p>`;
+      }
     });
   }
 
@@ -645,7 +666,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ====== Usage: remplir listes après init ======
   initLists().then(() => {
-    // Remplir les selects de l'UI Usage
     const eqSel = document.getElementById("usageEquipe");
     if (eqSel) {
       eqSel.innerHTML = '<option value="">(toutes)</option>';
