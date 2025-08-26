@@ -49,6 +49,7 @@ let _zonesList = [];
 let _cacheEquipeInfo = new Map();
 let LAST_PLAN = null;   // pour export Plan J+1
 let LAST_USAGE = null;  // pour export Usage
+let USAGE_SHOW_ALL = false; // false = équipes uniquement & jour J
 window._equipesCached = [];
 
 // ====== Select builders ======
@@ -112,7 +113,7 @@ function addRestesRow(value = "", qty = "") {
 // ====== Preview Besoins J+1 ======
 function ensurePreviewBox() {
   if (document.getElementById("besoinApercu")) return;
-  const card = document.querySelector('#tab-reappro .card:nth-of-type(2)'); // "Saisie Besoins J+1"
+  const card = document.querySelector('#tab-reappro .card:nth-of-type(2)');
   if (!card) return;
 
   const addBtn = document.getElementById("btnAddBesoin");
@@ -293,6 +294,13 @@ async function initLists() {
     (_zonesList || []).forEach(z => { const o = document.createElement("option"); o.value = o.textContent = z; sel.appendChild(o); });
   });
 
+  // Par défaut : dans Clôture J, la zone prend le nom de l'équipe sélectionnée (au chargement)
+  if (eqRestes && zoneRestes && eqRestes.value) {
+    let opt = Array.from(zoneRestes.options).find(o => o.value === eqRestes.value);
+    if (!opt) { opt = new Option(eqRestes.value, eqRestes.value); zoneRestes.add(opt, 0); }
+    zoneRestes.value = eqRestes.value;
+  }
+
   // Lignes vides par défaut
   if (document.getElementById('legacyItems')?.children.length === 0) addLegacyRow();
   if (document.getElementById('restesRows')?.children.length === 0) addRestesRow();
@@ -358,6 +366,7 @@ function ensureUsageUI() {
     </div>
     <div class="toolbar" style="margin-top:8px;">
       <button id="btnCalculerUsage">Calculer l'usage</button>
+      <button id="btnUsageToggle" class="secondary">Afficher tout</button>
       <button id="btnExportUsage" class="secondary" disabled>Exporter (XLSX)</button>
       <span id="usageMsg" class="muted"></span>
     </div>
@@ -381,11 +390,10 @@ document.addEventListener("DOMContentLoaded", () => {
   setToday("snapshotDate");
   setToday("legacyDate");
 
-  // Usage: dates par défaut (hier → aujourd’hui)
-  const today = new Date(); const tzToday = today.toISOString().slice(0, 10);
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
-  const tzYest = yesterday.toISOString().slice(0, 10);
-  const iFrom = document.getElementById("usageFrom"); if (iFrom) iFrom.value = tzYest;
+  // Usage : par défaut jour J uniquement
+  const today = new Date();
+  const tzToday = today.toISOString().slice(0, 10);
+  const iFrom = document.getElementById("usageFrom"); if (iFrom) iFrom.value = tzToday;
   const iTo = document.getElementById("usageTo"); if (iTo) iTo.value = tzToday;
 
   // Quand on change d’équipe dans Clôture J, caler la zone sur le nom de l’équipe
@@ -407,7 +415,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) { if (s) { s.textContent = "Erreur de connexion"; s.className = "error"; } }
   });
 
-  // Besoins J+1 (unitaire) → ajoute à la liste (local)
+  // Besoins J+1 (unitaire) → ajoute à la liste
   document.getElementById("btnAddBesoin")?.addEventListener("click", () => {
     const mat = document.getElementById("besoinMateriel")?.value || "";
     const cible = (document.getElementById("besoinCible")?.value || "").trim();
@@ -420,10 +428,8 @@ document.addEventListener("DOMContentLoaded", () => {
     msg.textContent = "Ligne ajoutée à la liste ci-dessous (non enregistrée)."; msg.className = "muted";
   });
 
-  // Besoins J+1 (batch multi-lignes) — ajout d'une ligne
+  // Besoins J+1 (batch)
   document.getElementById("btnBesoinsAddLine")?.addEventListener("click", () => addBesoinsRow());
-
-  // Besoins J+1 (batch multi-lignes) — enregistrement AVEC anti-doublons
   document.getElementById("btnBesoinsSave")?.addEventListener("click", async () => {
     const d = document.getElementById('besoinDate')?.value;
     const eq = document.getElementById('besoinEquipe')?.value;
@@ -437,7 +443,6 @@ document.addEventListener("DOMContentLoaded", () => {
     })).filter(r => (r.materiel || "").trim() !== '' && r.cible > 0);
     if (rows.length === 0) { msg.textContent = "Ajoutez au moins une ligne (cible > 0)."; msg.className = "error"; return; }
 
-    // Doublons dans la saisie (même matériel répété)
     const seen = new Set(); const dups = [];
     rows.forEach(r => { if (seen.has(r.materiel)) dups.push(r.materiel); else seen.add(r.materiel); });
     if (dups.length) {
@@ -445,7 +450,6 @@ document.addEventListener("DOMContentLoaded", () => {
       msg.className = "error"; return;
     }
 
-    // Doublons déjà présents dans la feuille pour date/équipe
     msg.textContent = "Vérifications..."; msg.className = "muted";
     try {
       const exist = await apiGet({ get: "besoinsEquipe", date: d, equipe: eq });
@@ -455,9 +459,8 @@ document.addEventListener("DOMContentLoaded", () => {
         msg.textContent = "Déjà saisis pour cette date/équipe : " + inter.join(", ") + ". Retirez-les ou changez la date.";
         msg.className = "error"; return;
       }
-    } catch (e) { /* continue même si la vérif échoue */ }
+    } catch (e) { /* ok */ }
 
-    // Enregistrement
     msg.textContent = "Enregistrement..."; msg.className = "muted";
     try {
       const payload = encodeURIComponent(JSON.stringify(rows));
@@ -522,7 +525,7 @@ document.addEventListener("DOMContentLoaded", () => {
     catch (e) { a.innerHTML = `<p class="error">Erreur: ${e.message}</p>`; }
   });
 
-  // Bouton Export Plan (injection si manquant)
+  // Bouton Export Plan
   const genBtn = document.getElementById("btnGenererMouvements");
   if (genBtn && !document.getElementById("btnExportPlan")) {
     const exportBtn = document.createElement("button");
@@ -539,7 +542,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ➜ NOUVEAU : Bouton "Distribuer vers équipes" (alimente Répartition Journalière)
+  // Distribuer vers équipes (alimente Répartition Journalière)
   if (genBtn && !document.getElementById("btnDistribuerPlan")) {
     const distribBtn = document.createElement("button");
     distribBtn.id = "btnDistribuerPlan";
@@ -695,18 +698,37 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const r = await apiGet({ usage: "journalier", from, to, equipe: eq, materiel: mat });
       if (r && r.error) { msg.textContent = "Erreur: " + r.error; msg.className = "error"; tbl.textContent = ""; exportBtn.disabled = true; return; }
-      const headers = r?.colonnes || ["Date", "Équipe", "Zone", "Matériel", "Restes(J-1)", "Entrées(J)", "Restes(J)", "Usage(J)"];
-      const rows = r?.lignes || [];
-      tbl.innerHTML = rows.length ? toTable(headers, rows) : "Aucune donnée pour la période sélectionnée.";
-      msg.textContent = rows.length ? `${rows.length} ligne(s)` : "OK"; msg.className = rows.length ? "ok" : "muted";
-      LAST_USAGE = r;
+
+      // Filtrage UX : mode compact (équipes & jour J) si USAGE_SHOW_ALL = false
+      let rows = r?.lignes || [];
+      if (!USAGE_SHOW_ALL) {
+        const dJ = document.getElementById("usageFrom")?.value;
+        rows = rows.filter(x => (x[0] === dJ));                 // jour J uniquement
+        const setEquipes = new Set(window._equipesCached || []);
+        rows = rows.filter(x => setEquipes.has(x[1]));          // uniquement les équipes connues
+      }
+
+      const headers = r?.colonnes || ["Date","Équipe","Zone","Matériel","Restes(J-1)","Entrées(J)","Restes(J)","Usage(J)"];
+      tbl.innerHTML = rows.length ? toTable(headers, rows) : "Aucune donnée pour la période/filtre sélectionné.";
+      const modeLabel = USAGE_SHOW_ALL ? "toutes lignes" : "équipes • J";
+      msg.textContent = rows.length ? `${rows.length} ligne(s) affichée(s) • ${modeLabel}` : `0 ligne • ${modeLabel}`;
+      msg.className = rows.length ? "ok" : "muted";
+      LAST_USAGE = { ...r, lignes: rows, colonnes: headers };
       exportBtn.disabled = rows.length === 0;
     } catch (e) {
       msg.textContent = "Erreur: " + e.message; msg.className = "error"; tbl.textContent = ""; LAST_USAGE = null; exportBtn.disabled = true;
     }
   });
 
-  // Usage: Export XLSX
+  // Usage: Toggle "Afficher tout"
+  document.getElementById("btnUsageToggle")?.addEventListener("click", () => {
+    USAGE_SHOW_ALL = !USAGE_SHOW_ALL;
+    const btn = document.getElementById("btnUsageToggle");
+    btn.textContent = USAGE_SHOW_ALL ? "Afficher équipes • J" : "Afficher tout";
+    document.getElementById("btnCalculerUsage")?.click();
+  });
+
+  // Usage: Export XLSX (reprend la vue affichée)
   document.getElementById("btnExportUsage")?.addEventListener("click", async () => {
     if (!LAST_USAGE) return;
     const from = document.getElementById("usageFrom")?.value || LAST_USAGE.from || "from";
