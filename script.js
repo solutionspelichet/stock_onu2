@@ -19,6 +19,21 @@ function escapeHtml(x) {
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+async function apiGetDashboard(J, J1, F, T) {
+  try {
+    // route que nous utilisons normalement
+    return await apiGet({ dashboard: "1", date: J, jplus1: J1, from: F, to: T });
+  } catch (e) {
+    const msg = String(e && e.message || e);
+    // fallback au cas où ton Apps Script aurait "dashboard=summary"
+    if (msg.includes("Paramètre")) {
+      return await apiGet({ dashboard: "summary", j: J, j1: J1, from: F, to: T });
+    }
+    throw e;
+  }
+}
+
+
 async function apiGet(params) {
   const url = new URL(API_BASE_URL);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -157,6 +172,7 @@ function kpiTotalFromBlock(block, fallbackSum=false){
 }
 async function loadDashboard() {
   const J  = document.getElementById("dashJ").value;
+  const r = await apiGetDashboard(J, J1, F, T);
   const J1 = document.getElementById("dashJ1").value;
   const F  = document.getElementById("dashFrom").value;
   const T  = document.getElementById("dashTo").value;
