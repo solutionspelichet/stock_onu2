@@ -1,8 +1,3 @@
-/***********************
- *  Config API
- ***********************/
-const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <<< remplace ici
-
 
 /* =====================
  *  ONU — Suivi Stock (Front) — Trebuchet
