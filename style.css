@@ -7,11 +7,7 @@
   --shadow-sm:0 4px 16px rgba(0,0,0,.24);
 }
 /* Police Pelichet (déposez vos fichiers dans /fonts) */
-@font-face{
-  font-family:"Pelichet";
-  src:url("fonts/pelichet.woff2") format("woff2"), url("fonts/pelichet.woff") format("woff");
-  font-weight:400 800; font-style:normal; font-display:swap;
-}
+
 .pelichet-theme, .pelichet-theme * {
   font-family: "Trebuchet MS", "Helvetica Neue", Arial, sans-serif;
 }
