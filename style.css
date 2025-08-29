@@ -1,77 +1,107 @@
-:root{
-  --brand:#ff6a00; --brand-700:#e45f00;
-  --bg:#0f0f11; --panel:#17181b; --panel-2:#1e2024;
-  --text:#f4f6f8; --muted:#aeb3bb; --ok:#39d98a; --warn:#f5b000; --error:#ff4d4f;
-  --border:#2a2d33; --radius:14px; --radius-sm:10px;
-  --shadow:0 10px 30px rgba(0,0,0,.25);
-  --shadow-sm:0 4px 16px rgba(0,0,0,.24);
+:root {
+  --brand: #ff6a00;
+  --brand-700: #e45f00;
+  --bg: #0f0f11;
+  --panel: #17181b;
+  --panel-2: #1e2024;
+  --text: #f4f6f8;
+  --muted: #aeb3bb;
+  --ok: #39d98a;
+  --warn: #f5b000;
+  --error: #ff4d4f;
+  --border: #2a2d33;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 10px 30px rgba(0,0,0,.25);
+  --shadow-sm: 0 4px 16px rgba(0,0,0,.24);
 }
-/* Police Pelichet (déposez vos fichiers dans /fonts) */
 
+/* Police : Trebuchet MS */
 .pelichet-theme, .pelichet-theme * {
   font-family: "Trebuchet MS", "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Base */
-body{ margin:0; background:var(--bg); color:var(--text); }
-h1,h2,h3{ margin:0 0 .5rem 0; }
-.monospace{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.muted{ color:var(--muted); } .ok{ color:var(--ok); } .error{ color:var(--error); }
-.right{ margin-left:auto; }
-.align-end{ display:flex; align-items:flex-end; gap:.5rem; }
+body { margin:0; background:var(--bg); color:var(--text); }
+h1,h2,h3 {margin:0 0 .5rem 0;}
+.monospace {font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+.muted {color:var(--muted)}
+.ok {color:var(--ok)} .error {color:var(--error)}
+.right {margin-left:auto}
 
 /* Header */
-.app-header{ display:flex; align-items:center; gap:1rem; padding:10px 16px; position:sticky; top:0; z-index:9;
-  background:linear-gradient(90deg,var(--brand),var(--brand-700)); color:white; box-shadow:var(--shadow);}
-.app-header h1{ font-weight:700; font-size:clamp(18px,2.6vw,24px); }
+.app-header {
+  display:flex; align-items:center; gap:1rem;
+  padding:10px 16px; position:sticky; top:0; z-index:9;
+  background:linear-gradient(90deg, var(--brand), var(--brand-700));
+  color:white; box-shadow: var(--shadow);
+}
+.app-header h1 {font-weight:700; font-size: clamp(18px, 2.6vw, 24px);}
 
 /* Tabs */
-.tabs{ display:flex; gap:8px; padding:10px 16px; flex-wrap:wrap; border-bottom:1px solid var(--border); background:var(--panel); }
-.tab-button{ border:1px solid var(--border); background:var(--panel-2); color:var(--text); padding:10px 14px; border-radius:999px; cursor:pointer; }
-.tab-button.active{ background:var(--brand); border-color:transparent; color:white; font-weight:600; }
-.tab-panel.hidden{ display:none; } /* IMPORTANT pour cacher les onglets */
+.tabs {display:flex; gap:8px; padding:10px 16px; flex-wrap:wrap; border-bottom:1px solid var(--border); background:var(--panel);}
+.tab-button {
+  border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text);
+  padding:10px 14px; border-radius:999px; cursor:pointer;
+}
+.tab-button.active {
+  background:var(--brand); border-color: transparent; color:white; font-weight:600;
+}
 
 /* Cards */
-main{ padding:16px; max-width:1200px; margin:0 auto; }
-.card{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px; box-shadow:var(--shadow-sm); }
-
-/* Inputs & buttons */
-input,select,textarea,button{ font:inherit; color:inherit; }
-input[type="date"], input[type="text"], select, textarea{
-  background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; width:100%;
+main {padding:16px; max-width:1200px; margin:0 auto}
+.card {
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  padding:16px; margin-bottom:16px; box-shadow:var(--shadow-sm);
 }
-button{ background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:10px 14px; cursor:pointer; }
-button.primary{ background:var(--brand); border-color:transparent; color:white; font-weight:600; }
-button.secondary{ background:transparent; border-color:var(--brand); color:var(--brand); }
+
+/* Buttons */
+button {background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:10px 14px; cursor:pointer;}
+button.primary {background: var(--brand); border-color: transparent; color:white; font-weight:600;}
+button.secondary {background: transparent; border-color: var(--brand); color: var(--brand);}
+
+/* Inputs */
+input, select, textarea {background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius: var(--radius-sm); padding:10px 12px; width:100%;}
 
 /* Tables */
-.table-wrap{ overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--border); }
-.scroll-x{ overflow-x:auto; }
-table{ width:100%; border-collapse:collapse; background:var(--panel-2); }
-th,td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
-thead th{ position:sticky; top:0; background:color-mix(in oklab, var(--panel-2) 80%, black); }
+.table-wrap {overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--border);}
+.scroll-x {overflow-x:auto}
+table {width:100%; border-collapse:collapse; background:var(--panel-2);}
+th, td {padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap;}
+thead th {position:sticky; top:0; background:color-mix(in oklab, var(--panel-2) 80%, black);}
 
-/* Grid helpers */
-.grid{ display:grid; gap:12px; }
-.grid-4{ grid-template-columns:repeat(4,1fr); }
-.grid-3{ grid-template-columns:repeat(3,1fr); }
-.row-2{ display:grid; gap:12px; grid-template-columns:1fr 1fr; }
+/* Grid */
+.grid {display:grid; gap:12px}
+.grid-4 {grid-template-columns: repeat(4, 1fr);}
+.grid-3 {grid-template-columns: repeat(3, 1fr);}
+.grid-sm-2 {}
+.grid-xs-1 {}
 
-/* KPI */
-.kpis{ margin-bottom:16px; }
-.kpi{ background:linear-gradient(180deg, color-mix(in oklab, var(--brand) 18%, transparent), transparent);
-  border:1px solid var(--border); border-radius:var(--radius); padding:14px; }
-.kpi-title{ font-size:.9rem; color:var(--muted); }
-.kpi-value{ font-size:clamp(20px,4.2vw,32px); font-weight:700; }
+.row-2,.row-3,.row-4 {display:grid; gap:12px}
+.row-2 {grid-template-columns: 1fr 1fr;}
+.row-3 {grid-template-columns: 1fr 1fr 1fr;}
+.row-4 {grid-template-columns: 1fr 1fr 1fr 1fr;}
+
+/* KPIs */
+.kpis {margin-bottom:16px}
+.kpi {background:linear-gradient(180deg, color-mix(in oklab, var(--brand) 18%, transparent), transparent); border:1px solid var(--border); border-radius:var(--radius); padding:14px;}
+.kpi-title {font-size:.9rem; color:var(--muted)}
+.kpi-value {font-size: clamp(20px, 4.2vw, 32px); font-weight:700}
+
+/* ONGLET: cacher les panneaux non actifs */
+.tab-panel.hidden { display: none; }
 
 /* Responsive */
-@media (max-width:1024px){
-  .grid-4{ grid-template-columns:repeat(2,1fr); }
-  .grid-3{ grid-template-columns:repeat(2,1fr); }
-  .row-2{ grid-template-columns:1fr; }
-  main{ padding:12px; }
+@media (max-width: 1024px){
+  .row-4,.row-3 {grid-template-columns: 1fr 1fr;}
+  .grid-4,.grid-3 {grid-template-columns: repeat(2, 1fr);}
+  main{padding:12px}
 }
-@media (max-width:640px){
-  .tabs{ gap:6px; } .tab-button{ padding:8px 12px; }
-  .app-header{ padding:8px 12px; }
+@media (max-width: 640px){
+  .row-4,.row-3,.row-2 {grid-template-columns: 1fr;}
+  .grid-4,.grid-3,.grid-2 {grid-template-columns: 1fr;}
+  .tabs{gap:6px}
+  .tab-button{padding:8px 12px}
+  .app-header{padding:8px 12px}
 }
