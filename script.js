@@ -5,7 +5,7 @@
 /***********************
  *  Config API
  ***********************/
-const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
+const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <-- remplace si besoin
 
 /***********************
  *  Helpers
@@ -95,11 +95,12 @@ function setOptions(selectEl, options, keepValue=true) {
   if (keepValue && old && options.includes(old)) selectEl.value = old;
 }
 
+/** Met à jour tous les selects de matériel dans Besoins et Clôture */
 function rebuildMaterialSelectsInTable() {
-  // met à jour tous les <select class="b_mat"> avec REF_MAT
-  document.querySelectorAll("select.b_mat").forEach(sel=>{
+  document.querySelectorAll("select.b_mat, select.c_mat").forEach(sel=>{
     const old = sel.value;
-    sel.innerHTML = `<option value="">— choisir —</option>` + REF_MAT.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    sel.innerHTML = `<option value="">— choisir —</option>` +
+      REF_MAT.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
     if (old && REF_MAT.includes(old)) sel.value = old;
   });
 }
@@ -235,9 +236,99 @@ async function actionDistribuerBiblioEquipes(dateJ1) {
 }
 
 /***********************
- *  Clôture J — Restes
+ *  Clôture J — Restes (NOUVEL ÉDITEUR MULTI-LIGNES)
  ***********************/
+function setupClotureEditor() {
+  const ta = document.getElementById("c_csv");
+  if (!ta) return;
+
+  // Cache l’ancien textarea
+  ta.style.display = "none";
+
+  // Conteneur éditeur
+  const wrap = document.createElement("div");
+  wrap.id = "c_editor";
+  wrap.className = "table-wrap scroll-x";
+  wrap.style.marginTop = "10px";
+
+  // Toolbar au-dessus (bouton ajouter)
+  const toolbar = document.createElement("div");
+  toolbar.className = "toolbar";
+  const addBtn = document.createElement("button");
+  addBtn.id = "c_add_row";
+  addBtn.className = "secondary";
+  addBtn.textContent = "+ Ajouter une ligne";
+  toolbar.appendChild(addBtn);
+
+  // Table
+  const table = document.createElement("table");
+  table.id = "c_table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th style="min-width:220px;">Matériel</th>
+        <th style="min-width:120px;">Quantité</th>
+        <th>—</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  // Insert DOM
+  ta.insertAdjacentElement("afterend", wrap);
+  wrap.insertAdjacentElement("beforebegin", toolbar);
+  wrap.appendChild(table);
+
+  // Action bouton
+  addBtn.addEventListener("click", ()=> c_addRow());
+}
+
+function c_addRow(matDefault="", qtyDefault="") {
+  const tbody = document.querySelector("#c_table tbody");
+  const tr = document.createElement("tr");
+
+  // Matériel (select)
+  const tdMat = document.createElement("td");
+  const sel = document.createElement("select");
+  sel.className = "c_mat";
+  sel.innerHTML = `<option value="">— choisir —</option>` +
+    REF_MAT.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+  if (matDefault) sel.value = matDefault;
+  tdMat.appendChild(sel);
+
+  // Quantité (number + datalist)
+  const tdQty = document.createElement("td");
+  const qty = document.createElement("input");
+  qty.type = "number"; qty.min = "0"; qty.step = "1"; qty.value = qtyDefault || "";
+  qty.className = "c_qty";
+  qty.setAttribute("list","qty_options");
+  tdQty.appendChild(qty);
+
+  // Supprimer ligne
+  const tdDel = document.createElement("td");
+  const btn = document.createElement("button");
+  btn.textContent = "✕"; btn.className = "secondary";
+  btn.addEventListener("click", ()=> tr.remove());
+  tdDel.appendChild(btn);
+
+  tr.append(tdMat, tdQty, tdDel);
+  tbody.appendChild(tr);
+}
+
+function c_collectLines() {
+  const rows = Array.from(document.querySelectorAll("#c_table tbody tr"));
+  const lignes = [];
+  for (const tr of rows) {
+    const mat = tr.querySelector(".c_mat")?.value || "";
+    const q   = parseInt(tr.querySelector(".c_qty")?.value || "0", 10) || 0;
+    if (!mat || q < 0) continue;
+    lignes.push({ materiel: mat, quantite: q });
+  }
+  return lignes;
+}
+
 function parseTextLinesToRows(txt) {
+  // Fallback si jamais on veut encore coller "Matériel, Quantité"
   const out = [];
   (txt||"").split(/\r?\n/).forEach(line=>{
     const m = line.split(",");
@@ -249,15 +340,26 @@ function parseTextLinesToRows(txt) {
   });
   return out;
 }
+
 async function saveRestes() {
   const d = document.getElementById("c_date").value;
   const equipe = document.getElementById("c_equipe").value;
-  const zoneEl = document.getElementById("c_zone");
-  const zone = (zoneEl.value || equipe);
-  const lignes = parseTextLinesToRows(document.getElementById("c_csv").value);
+  const zone = (document.getElementById("c_zone").value || equipe);
+
+  // d’abord, on récupère les lignes de l’éditeur
+  let lignes = c_collectLines();
+
+  // fallback: si pas de ligne dans le tableau, on lit le textarea caché (compat)
+  if (!lignes.length) {
+    lignes = parseTextLinesToRows(document.getElementById("c_csv").value);
+  }
+
   if (!d || !equipe || !lignes.length) return alert("Complète la date, l’équipe et au moins une ligne.");
   const t = await apiText({ action: "saveRestesEquipe", date: d, equipe, zone, lignes: JSON.stringify(lignes) });
   alert(t);
+  // Reset de l’éditeur
+  const tbody = document.querySelector("#c_table tbody");
+  if (tbody) tbody.innerHTML = "";
   await loadReferentials();
 }
 
@@ -415,7 +517,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
   document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
-  // Clôture — zone auto = équipe + datalist
+  // Clôture — nouvel éditeur multi-lignes + zone auto = équipe
+  setupClotureEditor();
   document.getElementById("c_equipe").addEventListener("change", ()=>{
     const v = document.getElementById("c_equipe").value;
     const z = document.getElementById("c_zone");
