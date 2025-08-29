@@ -4,6 +4,14 @@
 const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <<< remplace ici
 
 
+/* =====================
+ *  ONU — Suivi Stock (Front) — Trebuchet
+ *  ===================== */
+
+/***********************
+ *  Config API
+ ***********************/
+const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <-- remplace si besoin
 
 /***********************
  *  Helpers
@@ -62,14 +70,9 @@ let REF_EQ = [];
 let REF_MAT = [];
 
 async function loadReferentials() {
-  try {
-    REF_EQ = await apiGet({ get: "equipes" }) || [];
-  } catch { REF_EQ = []; }
-  try {
-    REF_MAT = await apiGet({ get: "materiels" }) || [];
-  } catch { REF_MAT = []; }
+  try { REF_EQ = await apiGet({ get: "equipes" }) || []; } catch { REF_EQ = []; }
+  try { REF_MAT = await apiGet({ get: "materiels" }) || []; } catch { REF_MAT = []; }
 
-  // Équipes sur Réappro (Besoins) + Clôture
   const eqSelects = [document.getElementById("b_equipe"), document.getElementById("c_equipe")].filter(Boolean);
   for (const sel of eqSelects) {
     sel.innerHTML = "";
@@ -88,7 +91,6 @@ function b_addRow(matDefault="", cibleDefault="") {
   const tbody = document.querySelector("#b_table tbody");
   const tr = document.createElement("tr");
 
-  // Matériel (select)
   const tdMat = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "b_mat";
@@ -96,21 +98,18 @@ function b_addRow(matDefault="", cibleDefault="") {
   if (matDefault) sel.value = matDefault;
   tdMat.appendChild(sel);
 
-  // Cible
   const tdCible = document.createElement("td");
   const inp = document.createElement("input");
   inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.value = cibleDefault || "";
   inp.className = "b_cible";
   tdCible.appendChild(inp);
 
-  // Commentaire
   const tdCom = document.createElement("td");
   const txt = document.createElement("input");
   txt.type = "text"; txt.placeholder = "commentaire (facultatif)";
   txt.className = "b_comment";
   tdCom.appendChild(txt);
 
-  // Supprimer
   const tdDel = document.createElement("td");
   const btn = document.createElement("button");
   btn.textContent = "✕"; btn.className = "secondary";
@@ -255,7 +254,6 @@ async function loadDashboard() {
     renderBlock("dashBesoinsEqJ1", r.besoinsJplus1Equipes);
     renderBlock("dashUsage", r.usagePivot);
 
-    // KPIs
     document.getElementById("kpi-vc").textContent   = kpiTotalFromBlock(r.stockVC);
     document.getElementById("kpi-bibj").textContent = kpiTotalFromBlock(r.entreesBiblioJour);
     document.getElementById("kpi-repj").textContent = kpiTotalFromBlock(r.repartJourEquipes);
@@ -343,19 +341,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   setDateDefault(document.getElementById("r_jour"), 0);
   setDateDefault(document.getElementById("r_jour1"), 1);
 
-  // Référentiels (équipes + matériels)
+  // Référentiels
   await loadReferentials();
 
   // Besoins J+1
   document.getElementById("b_add_row").addEventListener("click", ()=> b_addRow());
   document.getElementById("b_save").addEventListener("click", b_save);
 
-  // Calcul plan & mouvements
+  // Plan & mouvements
   document.getElementById("r_calc").addEventListener("click", ()=> loadPlan(document.getElementById("r_jour1").value));
   document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
   document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
-  // Clôture — défaut zone = équipe
+  // Clôture — zone auto = équipe
   document.getElementById("c_equipe").addEventListener("change", ()=>{
     const v = document.getElementById("c_equipe").value;
     const z = document.getElementById("c_zone");
