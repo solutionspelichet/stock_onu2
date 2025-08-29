@@ -1,4 +1,3 @@
-
 /* =====================
  *  ONU — Suivi Stock (Front) — Trebuchet
  *  ===================== */
@@ -42,6 +41,7 @@ function setDateDefault(input, deltaDays=0) {
   const d = new Date(); d.setDate(d.getDate()+deltaDays);
   input.value = d.toISOString().slice(0,10);
 }
+const collFR = new Intl.Collator('fr', { sensitivity:'base', numeric:true });
 
 /***********************
  *  Tabs
@@ -59,24 +59,60 @@ function initTabs() {
 }
 
 /***********************
- *  Données de référence
+ *  Référentiels (équipes & matériels)
  ***********************/
 let REF_EQ = [];
 let REF_MAT = [];
 
-async function loadReferentials() {
-  try { REF_EQ = await apiGet({ get: "equipes" }) || []; } catch { REF_EQ = []; }
-  try { REF_MAT = await apiGet({ get: "materiels" }) || []; } catch { REF_MAT = []; }
+function setOptions(selectEl, options, keepValue=true) {
+  if (!selectEl) return;
+  const old = keepValue ? selectEl.value : "";
+  selectEl.innerHTML = "";
+  (options||[]).forEach(v=>{
+    const opt = document.createElement("option");
+    opt.value = v; opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+  if (keepValue && old && options.includes(old)) selectEl.value = old;
+}
 
-  const eqSelects = [document.getElementById("b_equipe"), document.getElementById("c_equipe")].filter(Boolean);
-  for (const sel of eqSelects) {
-    sel.innerHTML = "";
-    REF_EQ.forEach(e=>{
-      const opt = document.createElement("option");
-      opt.value = e; opt.textContent = e;
-      sel.appendChild(opt);
-    });
+function rebuildMaterialSelectsInTable() {
+  // met à jour tous les <select class="b_mat"> avec REF_MAT
+  document.querySelectorAll("select.b_mat").forEach(sel=>{
+    const old = sel.value;
+    sel.innerHTML = `<option value="">— choisir —</option>` + REF_MAT.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    if (old && REF_MAT.includes(old)) sel.value = old;
+  });
+}
+
+async function loadReferentials() {
+  // On essaie l’endpoint dédié…
+  let eq = [], mat = [];
+  try { eq = await apiGet({ get: "equipes" }) || []; } catch {}
+  try { mat = await apiGet({ get: "materiels" }) || []; } catch {}
+
+  // Fallback si vide: on récupère zones et filtre
+  if (!eq.length) {
+    try {
+      const zones = await apiGet({ get: "zones" }) || [];
+      const ignore = new Set(["Voie Creuse","Bibliothèque","B26","Compactus","Reading Room 1","Reading Room 2","reading room 1","reading room 2","compactus","b26"]);
+      eq = (zones||[]).filter(z=>!ignore.has(z));
+    } catch {}
   }
+
+  // Tri FR + dédoublonnage (déjà fait côté backend, on sécurise quand même ici)
+  eq = Array.from(new Set(eq)).sort(collFR.compare);
+  mat = Array.from(new Set(mat)).sort(collFR.compare);
+
+  REF_EQ = eq;
+  REF_MAT = mat;
+
+  // Alimente les selects visibles
+  setOptions(document.getElementById("b_equipe"), REF_EQ);
+  setOptions(document.getElementById("c_equipe"), REF_EQ);
+  rebuildMaterialSelectsInTable();
+
+  console.log("Référentiels chargés:", { equipes: REF_EQ.length, materiels: REF_MAT.length });
 }
 
 /***********************
@@ -123,11 +159,15 @@ async function b_save() {
 
   const rows = Array.from(document.querySelectorAll("#b_table tbody tr"));
   const lignes = [];
+  const seenKey = new Set();
   for (const tr of rows) {
     const mat = tr.querySelector(".b_mat")?.value || "";
     const cible = parseInt(tr.querySelector(".b_cible")?.value || "0", 10) || 0;
     const commentaire = tr.querySelector(".b_comment")?.value || "";
     if (!mat || cible <= 0) continue;
+    const key = `${equipe}||${dateJ1}||${mat}`.toLowerCase();
+    if (seenKey.has(key)) { alert(`Doublon: ${mat} déjà saisi pour ${equipe}`); return; }
+    seenKey.add(key);
     lignes.push({ materiel: mat, cible, commentaire });
   }
   if (!lignes.length) return alert("Ajoute au moins une ligne (matériel + quantité).");
@@ -141,6 +181,8 @@ async function b_save() {
     });
     alert(msg);
     document.querySelector("#b_table tbody").innerHTML = "";
+    // recharger référentiels (au cas où nouveaux matériels / nouvelles équipes)
+    await loadReferentials();
   } catch(e) {
     alert("Erreur: " + e.message);
   }
@@ -161,10 +203,12 @@ async function loadPlan(dateJ1) {
 async function actionGenererVCAversBiblio(dateJ1) {
   const t = await apiText({ action: "genererReappro", date: dateJ1 });
   alert(t);
+  await loadReferentials();
 }
 async function actionDistribuerBiblioEquipes(dateJ1) {
   const t = await apiText({ action: "distribuerPlan", date: dateJ1 });
   alert(t);
+  await loadReferentials();
 }
 
 /***********************
@@ -187,12 +231,10 @@ async function saveRestes() {
   const equipe = document.getElementById("c_equipe").value;
   const zone = document.getElementById("c_zone").value || equipe;
   const lignes = parseTextLinesToRows(document.getElementById("c_csv").value);
-  const t = await apiText({
-    action: "saveRestesEquipe",
-    date: d, equipe, zone,
-    lignes: JSON.stringify(lignes)
-  });
+  if (!d || !equipe || !lignes.length) return alert("Complète la date, l’équipe et au moins une ligne.");
+  const t = await apiText({ action: "saveRestesEquipe", date: d, equipe, zone, lignes: JSON.stringify(lignes) });
   alert(t);
+  await loadReferentials();
 }
 
 /***********************
@@ -336,7 +378,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setDateDefault(document.getElementById("r_jour"), 0);
   setDateDefault(document.getElementById("r_jour1"), 1);
 
-  // Référentiels
+  // Référentiels initiaux
   await loadReferentials();
 
   // Besoins J+1
@@ -375,6 +417,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("a_snapshot").addEventListener("click", doSnapshot);
   document.getElementById("a_lock").addEventListener("change", toggleSnapshotLock);
 
-  // bouton global reload
-  document.getElementById("btnReload").addEventListener("click", ()=> location.reload());
+  // bouton “↻ Recharger” => recharge uniquement les référentiels
+  document.getElementById("btnReload").addEventListener("click", async ()=>{
+    await loadReferentials();
+    alert("Référentiels (équipes & matériels) rechargés.");
+  });
 });
