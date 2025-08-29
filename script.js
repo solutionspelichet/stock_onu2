@@ -5,7 +5,7 @@
 /***********************
  *  Config API
  ***********************/
-const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <-- remplace si besoin
+const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 /***********************
  *  Helpers
@@ -59,10 +59,29 @@ function initTabs() {
 }
 
 /***********************
- *  Référentiels (équipes & matériels)
+ *  Référentiels
  ***********************/
 let REF_EQ = [];
 let REF_MAT = [];
+const QTY_SUGGESTIONS = [1,2,5,10,20,50,100];
+
+function ensureDatalists() {
+  // datalist pour quantités
+  if (!document.getElementById("qty_options")) {
+    const dl = document.createElement("datalist");
+    dl.id = "qty_options";
+    dl.innerHTML = QTY_SUGGESTIONS.map(n=>`<option value="${n}"></option>`).join("");
+    document.body.appendChild(dl);
+  }
+  // datalist pour zones (recyclée pour #c_zone)
+  if (!document.getElementById("zone_options")) {
+    const dl = document.createElement("datalist");
+    dl.id = "zone_options";
+    document.body.appendChild(dl);
+  }
+  const zoneInput = document.getElementById("c_zone");
+  if (zoneInput) zoneInput.setAttribute("list", "zone_options");
+}
 
 function setOptions(selectEl, options, keepValue=true) {
   if (!selectEl) return;
@@ -85,13 +104,21 @@ function rebuildMaterialSelectsInTable() {
   });
 }
 
+function refreshZoneDatalist() {
+  const dl = document.getElementById("zone_options");
+  if (!dl) return;
+  dl.innerHTML = (REF_EQ||[]).map(z=>`<option value="${escapeHtml(z)}"></option>`).join("");
+}
+
 async function loadReferentials() {
-  // On essaie l’endpoint dédié…
+  ensureDatalists();
+
+  // Tentative principale : endpoints dédiés
   let eq = [], mat = [];
   try { eq = await apiGet({ get: "equipes" }) || []; } catch {}
   try { mat = await apiGet({ get: "materiels" }) || []; } catch {}
 
-  // Fallback si vide: on récupère zones et filtre
+  // Fallback si vide : zones -> équipes
   if (!eq.length) {
     try {
       const zones = await apiGet({ get: "zones" }) || [];
@@ -100,7 +127,7 @@ async function loadReferentials() {
     } catch {}
   }
 
-  // Tri FR + dédoublonnage (déjà fait côté backend, on sécurise quand même ici)
+  // Tri + dédoublonnage
   eq = Array.from(new Set(eq)).sort(collFR.compare);
   mat = Array.from(new Set(mat)).sort(collFR.compare);
 
@@ -111,17 +138,19 @@ async function loadReferentials() {
   setOptions(document.getElementById("b_equipe"), REF_EQ);
   setOptions(document.getElementById("c_equipe"), REF_EQ);
   rebuildMaterialSelectsInTable();
+  refreshZoneDatalist();
 
   console.log("Référentiels chargés:", { equipes: REF_EQ.length, materiels: REF_MAT.length });
 }
 
 /***********************
- *  Besoins J+1 — Éditeur multi-lignes
+ *  Besoins J+1 — multi-lignes
  ***********************/
 function b_addRow(matDefault="", cibleDefault="") {
   const tbody = document.querySelector("#b_table tbody");
   const tr = document.createElement("tr");
 
+  // Matériel (select)
   const tdMat = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "b_mat";
@@ -129,18 +158,22 @@ function b_addRow(matDefault="", cibleDefault="") {
   if (matDefault) sel.value = matDefault;
   tdMat.appendChild(sel);
 
+  // Cible (input number + datalist)
   const tdCible = document.createElement("td");
   const inp = document.createElement("input");
   inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.value = cibleDefault || "";
   inp.className = "b_cible";
+  inp.setAttribute("list","qty_options");
   tdCible.appendChild(inp);
 
+  // Commentaire
   const tdCom = document.createElement("td");
   const txt = document.createElement("input");
   txt.type = "text"; txt.placeholder = "commentaire (facultatif)";
   txt.className = "b_comment";
   tdCom.appendChild(txt);
 
+  // Supprimer ligne
   const tdDel = document.createElement("td");
   const btn = document.createElement("button");
   btn.textContent = "✕"; btn.className = "secondary";
@@ -172,24 +205,14 @@ async function b_save() {
   }
   if (!lignes.length) return alert("Ajoute au moins une ligne (matériel + quantité).");
 
-  try {
-    const msg = await apiText({
-      action: "addBesoinsBatch",
-      date: dateJ1,
-      equipe,
-      lignes: JSON.stringify(lignes)
-    });
-    alert(msg);
-    document.querySelector("#b_table tbody").innerHTML = "";
-    // recharger référentiels (au cas où nouveaux matériels / nouvelles équipes)
-    await loadReferentials();
-  } catch(e) {
-    alert("Erreur: " + e.message);
-  }
+  const msg = await apiText({ action: "addBesoinsBatch", date: dateJ1, equipe, lignes: JSON.stringify(lignes) });
+  alert(msg);
+  document.querySelector("#b_table tbody").innerHTML = "";
+  await loadReferentials(); // maj listes après saisie
 }
 
 /***********************
- *  Plan J+1 — calcul & mouvements
+ *  Plan J+1
  ***********************/
 async function loadPlan(dateJ1) {
   const r = await apiGet({ plan: "reappro", date: dateJ1 });
@@ -229,7 +252,8 @@ function parseTextLinesToRows(txt) {
 async function saveRestes() {
   const d = document.getElementById("c_date").value;
   const equipe = document.getElementById("c_equipe").value;
-  const zone = document.getElementById("c_zone").value || equipe;
+  const zoneEl = document.getElementById("c_zone");
+  const zone = (zoneEl.value || equipe);
   const lignes = parseTextLinesToRows(document.getElementById("c_csv").value);
   if (!d || !equipe || !lignes.length) return alert("Complète la date, l’équipe et au moins une ligne.");
   const t = await apiText({ action: "saveRestesEquipe", date: d, equipe, zone, lignes: JSON.stringify(lignes) });
@@ -372,6 +396,7 @@ async function doSnapshot() {
  ***********************/
 document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
+  ensureDatalists();
 
   // Dates par défaut
   setDateDefault(document.getElementById("b_j1"), 1);
@@ -390,7 +415,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
   document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
-  // Clôture — zone auto = équipe
+  // Clôture — zone auto = équipe + datalist
   document.getElementById("c_equipe").addEventListener("change", ()=>{
     const v = document.getElementById("c_equipe").value;
     const z = document.getElementById("c_zone");
@@ -417,7 +442,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("a_snapshot").addEventListener("click", doSnapshot);
   document.getElementById("a_lock").addEventListener("change", toggleSnapshotLock);
 
-  // bouton “↻ Recharger” => recharge uniquement les référentiels
+  // “↻ Recharger” => ne recharge que les référentiels
   document.getElementById("btnReload").addEventListener("click", async ()=>{
     await loadReferentials();
     alert("Référentiels (équipes & matériels) rechargés.");
