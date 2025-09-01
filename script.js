@@ -112,6 +112,38 @@ function addStepHeaders() {
   );
 }
 
+/* ===== Réordonnancement : Plan après Clôture ===== */
+function smallestCommonAncestor_(ids) {
+  const els = ids.map(id => document.getElementById(id)).filter(Boolean);
+  if (!els.length) return null;
+  let node = els[0];
+  outer: while (node) {
+    for (const e of els) { if (!node.contains(e)) { node = node.parentElement; continue outer; } }
+    return node;
+  }
+  return null;
+}
+function reorderReapproSections() {
+  // Trouve les racines de section
+  const planRoot   = smallestCommonAncestor_(['r_jour1','r_calc','r_details','r_agregat']);
+  const clotRoot   = smallestCommonAncestor_(['c_date','c_equipe','c_save']);
+  if (!clotRoot || !planRoot || clotRoot === planRoot) return;
+
+  // Récupère l’en-tête Étape 3 (si présent)
+  const planAnchor = document.getElementById('r_jour1');
+  const planHeader = (planAnchor && planAnchor.previousElementSibling && planAnchor.previousElementSibling.classList?.contains('step-block'))
+    ? planAnchor.previousElementSibling
+    : null;
+
+  // Déplace l’entête puis la section Plan juste après la section Clôture
+  if (planHeader) {
+    clotRoot.insertAdjacentElement('afterend', planHeader);
+    planHeader.insertAdjacentElement('afterend', planRoot);
+  } else {
+    clotRoot.insertAdjacentElement('afterend', planRoot);
+  }
+}
+
 /***********************
  *  Référentiels
  ***********************/
@@ -120,14 +152,12 @@ let REF_MAT = [];
 const QTY_SUGGESTIONS = [1,2,5,10,20,50,100];
 
 function ensureDatalists() {
-  // datalist pour quantités
   if (!document.getElementById("qty_options")) {
     const dl = document.createElement("datalist");
     dl.id = "qty_options";
     dl.innerHTML = QTY_SUGGESTIONS.map(n=>`<option value="${n}"></option>`).join("");
     document.body.appendChild(dl);
   }
-  // datalist pour zones (recyclée pour #c_zone)
   if (!document.getElementById("zone_options")) {
     const dl = document.createElement("datalist");
     dl.id = "zone_options";
@@ -149,7 +179,6 @@ function setOptions(selectEl, options, keepValue=true) {
   if (keepValue && old && options.includes(old)) selectEl.value = old;
 }
 
-/** Met à jour tous les selects de matériel dans Besoins et Clôture */
 function rebuildMaterialSelectsInTable() {
   document.querySelectorAll("select.b_mat, select.c_mat").forEach(sel=>{
     const old = sel.value;
@@ -167,13 +196,9 @@ function refreshZoneDatalist() {
 
 async function loadReferentials() {
   ensureDatalists();
-
-  // Tentative principale : endpoints dédiés
   let eq = [], mat = [];
   try { eq = await apiGet({ get: "equipes" }) || []; } catch {}
   try { mat = await apiGet({ get: "materiels" }) || []; } catch {}
-
-  // Fallback si vide : zones -> équipes
   if (!eq.length) {
     try {
       const zones = await apiGet({ get: "zones" }) || [];
@@ -181,15 +206,12 @@ async function loadReferentials() {
       eq = (zones||[]).filter(z=>!ignore.has(z));
     } catch {}
   }
-
-  // Tri + dédoublonnage
   eq = Array.from(new Set(eq)).sort(collFR.compare);
   mat = Array.from(new Set(mat)).sort(collFR.compare);
 
   REF_EQ = eq;
   REF_MAT = mat;
 
-  // Alimente les selects visibles
   setOptions(document.getElementById("b_equipe"), REF_EQ);
   setOptions(document.getElementById("c_equipe"), REF_EQ);
   rebuildMaterialSelectsInTable();
@@ -205,7 +227,6 @@ function b_addRow(matDefault="", cibleDefault="") {
   const tbody = document.querySelector("#b_table tbody");
   const tr = document.createElement("tr");
 
-  // Matériel (select)
   const tdMat = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "b_mat";
@@ -213,7 +234,6 @@ function b_addRow(matDefault="", cibleDefault="") {
   if (matDefault) sel.value = matDefault;
   tdMat.appendChild(sel);
 
-  // Cible (input number + datalist)
   const tdCible = document.createElement("td");
   const inp = document.createElement("input");
   inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.value = cibleDefault || "";
@@ -221,14 +241,12 @@ function b_addRow(matDefault="", cibleDefault="") {
   inp.setAttribute("list","qty_options");
   tdCible.appendChild(inp);
 
-  // Commentaire
   const tdCom = document.createElement("td");
   const txt = document.createElement("input");
   txt.type = "text"; txt.placeholder = "commentaire (facultatif)";
   txt.className = "b_comment";
   tdCom.appendChild(txt);
 
-  // Supprimer ligne
   const tdDel = document.createElement("td");
   const btn = document.createElement("button");
   btn.textContent = "✕"; btn.className = "secondary";
@@ -263,7 +281,7 @@ async function b_save() {
   const msg = await apiText({ action: "addBesoinsBatch", date: dateJ1, equipe, lignes: JSON.stringify(lignes) });
   alert(msg);
   document.querySelector("#b_table tbody").innerHTML = "";
-  await loadReferentials(); // maj listes après saisie
+  await loadReferentials();
 }
 
 /***********************
@@ -296,16 +314,13 @@ function setupClotureEditor() {
   const ta = document.getElementById("c_csv");
   if (!ta) return;
 
-  // Cache l’ancien textarea
   ta.style.display = "none";
 
-  // Conteneur éditeur
   const wrap = document.createElement("div");
   wrap.id = "c_editor";
   wrap.className = "table-wrap scroll-x";
   wrap.style.marginTop = "10px";
 
-  // Toolbar au-dessus (bouton ajouter)
   const toolbar = document.createElement("div");
   toolbar.className = "toolbar";
   const addBtn = document.createElement("button");
@@ -314,7 +329,6 @@ function setupClotureEditor() {
   addBtn.textContent = "+ Ajouter une ligne";
   toolbar.appendChild(addBtn);
 
-  // Table
   const table = document.createElement("table");
   table.id = "c_table";
   table.innerHTML = `
@@ -328,12 +342,10 @@ function setupClotureEditor() {
     <tbody></tbody>
   `;
 
-  // Insert DOM
   ta.insertAdjacentElement("afterend", wrap);
   wrap.insertAdjacentElement("beforebegin", toolbar);
   wrap.appendChild(table);
 
-  // Action bouton
   addBtn.addEventListener("click", ()=> c_addRow());
 }
 
@@ -341,7 +353,6 @@ function c_addRow(matDefault="", qtyDefault="") {
   const tbody = document.querySelector("#c_table tbody");
   const tr = document.createElement("tr");
 
-  // Matériel (select)
   const tdMat = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "c_mat";
@@ -350,7 +361,6 @@ function c_addRow(matDefault="", qtyDefault="") {
   if (matDefault) sel.value = matDefault;
   tdMat.appendChild(sel);
 
-  // Quantité (number + datalist)
   const tdQty = document.createElement("td");
   const qty = document.createElement("input");
   qty.type = "number"; qty.min = "0"; qty.step = "1"; qty.value = qtyDefault || "";
@@ -358,7 +368,6 @@ function c_addRow(matDefault="", qtyDefault="") {
   qty.setAttribute("list","qty_options");
   tdQty.appendChild(qty);
 
-  // Supprimer ligne
   const tdDel = document.createElement("td");
   const btn = document.createElement("button");
   btn.textContent = "✕"; btn.className = "secondary";
@@ -382,7 +391,6 @@ function c_collectLines() {
 }
 
 function parseTextLinesToRows(txt) {
-  // Fallback si jamais on veut encore coller "Matériel, Quantité"
   const out = [];
   (txt||"").split(/\r?\n/).forEach(line=>{
     const m = line.split(",");
@@ -400,10 +408,7 @@ async function saveRestes() {
   const equipe = document.getElementById("c_equipe").value;
   const zone = (document.getElementById("c_zone").value || equipe);
 
-  // d’abord, on récupère les lignes de l’éditeur
   let lignes = c_collectLines();
-
-  // fallback: si pas de ligne dans le tableau, on lit le textarea caché (compat)
   if (!lignes.length) {
     lignes = parseTextLinesToRows(document.getElementById("c_csv").value);
   }
@@ -411,7 +416,6 @@ async function saveRestes() {
   if (!d || !equipe || !lignes.length) return alert("Complète la date, l’équipe et au moins une ligne.");
   const t = await apiText({ action: "saveRestesEquipe", date: d, equipe, zone, lignes: JSON.stringify(lignes) });
   alert(t);
-  // Reset de l’éditeur
   const tbody = document.querySelector("#c_table tbody");
   if (tbody) tbody.innerHTML = "";
   await loadReferentials();
@@ -552,7 +556,7 @@ async function doSnapshot() {
  ***********************/
 document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
-  addStepHeaders();          // ← Étapes 1/2/3 visibles
+  addStepHeaders();                 // Étapes 1/2/3 visibles
   ensureDatalists();
 
   // Dates par défaut
@@ -567,11 +571,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("b_add_row").addEventListener("click", ()=> b_addRow());
   document.getElementById("b_save").addEventListener("click", b_save);
 
-  // Plan & mouvements
-  document.getElementById("r_calc").addEventListener("click", ()=> loadPlan(document.getElementById("r_jour1").value));
-  document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
-  document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
-
   // Clôture — éditeur multi-lignes + zone auto = équipe
   setupClotureEditor();
   document.getElementById("c_equipe").addEventListener("change", ()=>{
@@ -581,6 +580,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   setDateDefault(document.getElementById("c_date"), 0);
   document.getElementById("c_save").addEventListener("click", saveRestes);
+
+  // ➜ Réordonner : placer Plan après Clôture
+  reorderReapproSections();
+
+  // Plan & mouvements
+  document.getElementById("r_calc").addEventListener("click", ()=> loadPlan(document.getElementById("r_jour1").value));
+  document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
+  document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
   // Dashboard
   const today = new Date(), tomorrow = new Date(); tomorrow.setDate(today.getDate()+1);
