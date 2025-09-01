@@ -1,11 +1,11 @@
 /* =====================
- *  ONU — Suivi Stock (Front) — Trebuchet
+ *  ONU — Suivi Stock (Front) — Trebuchet + Orange Pelichet
  *  ===================== */
 
 /***********************
  *  Config API
  ***********************/
-const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // <-- remplace si besoin
+const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // ← remplace si besoin
 
 /***********************
  *  Helpers
@@ -56,6 +56,60 @@ function initTabs() {
       btn.classList.add("active");
     });
   });
+}
+
+/* ===== Étapes visuelles Réappro ===== */
+function injectStepStyles() {
+  if (document.getElementById("step-styles")) return;
+  const s = document.createElement("style");
+  s.id = "step-styles";
+  s.textContent = `
+    .step-block { margin: 18px 0 10px; }
+    .step-title { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; font-family: Trebuchet MS, Trebuchet, Arial, sans-serif; }
+    .step-badge { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%;
+                  background:#f16e00; color:#fff; font-weight:800; font-size:0.95rem; flex:0 0 26px; }
+    .step-sub { margin:6px 0 0 36px; font-size:0.9rem; opacity:0.85; font-family: Trebuchet MS, Trebuchet, Arial, sans-serif; }
+  `;
+  document.head.appendChild(s);
+}
+function insertStepHeader(anchorEl, num, title, sub) {
+  if (!anchorEl) return;
+  if (anchorEl.previousElementSibling && anchorEl.previousElementSibling.classList?.contains("step-block")) return;
+  const wrap = document.createElement("div");
+  wrap.className = "step-block";
+  wrap.innerHTML = `
+    <div class="step-title">
+      <span class="step-badge">${num}</span>
+      <span>${escapeHtml(title)}</span>
+    </div>
+    ${sub ? `<div class="step-sub">${escapeHtml(sub)}</div>` : ""}
+  `;
+  anchorEl.insertAdjacentElement("beforebegin", wrap);
+}
+function addStepHeaders() {
+  injectStepStyles();
+  const a1 = document.getElementById("b_j1");     // Besoins J+1
+  const a2 = document.getElementById("c_date");   // Clôture J
+  const a3 = document.getElementById("r_jour1");  // Plan J+1
+
+  insertStepHeader(
+    a1,
+    1,
+    "Besoins J+1 — Saisie",
+    "Saisir les besoins par équipe et par matériel pour le jour J+1 (la date par défaut est demain)."
+  );
+  insertStepHeader(
+    a2,
+    2,
+    "Clôture J — Restes d'équipe",
+    "Enregistrer les restes de fin de journée (J). La zone reprend automatiquement la valeur de l’équipe."
+  );
+  insertStepHeader(
+    a3,
+    3,
+    "Plan J+1 — Calcul / Mouvements",
+    "Calculer le plan (besoin = cible − reste), puis générer les mouvements Voie Creuse → Bibliothèque et Bibliothèque → Équipes."
+  );
 }
 
 /***********************
@@ -213,7 +267,7 @@ async function b_save() {
 }
 
 /***********************
- *  Plan J+1
+ *  Plan J+1 — calcul & mouvements
  ***********************/
 async function loadPlan(dateJ1) {
   const r = await apiGet({ plan: "reappro", date: dateJ1 });
@@ -236,7 +290,7 @@ async function actionDistribuerBiblioEquipes(dateJ1) {
 }
 
 /***********************
- *  Clôture J — Restes (NOUVEL ÉDITEUR MULTI-LIGNES)
+ *  Clôture J — Restes (éditeur multi-lignes)
  ***********************/
 function setupClotureEditor() {
   const ta = document.getElementById("c_csv");
@@ -498,6 +552,7 @@ async function doSnapshot() {
  ***********************/
 document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
+  addStepHeaders();          // ← Étapes 1/2/3 visibles
   ensureDatalists();
 
   // Dates par défaut
@@ -517,7 +572,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
   document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
-  // Clôture — nouvel éditeur multi-lignes + zone auto = équipe
+  // Clôture — éditeur multi-lignes + zone auto = équipe
   setupClotureEditor();
   document.getElementById("c_equipe").addEventListener("change", ()=>{
     const v = document.getElementById("c_equipe").value;
