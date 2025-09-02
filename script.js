@@ -91,7 +91,7 @@ function ensureDiv(id, parent=document.getElementById("dashboard")){
   return el;
 }
 function wipe(el){ if(el) el.innerHTML=""; }
-const __charts = {};
+
 function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
 function makeColors(n){
   // palette HSL simple et lisible
