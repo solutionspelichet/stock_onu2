@@ -21,6 +21,83 @@ function toTable(headers, rows) {
   const tbody = `<tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
 }
+
+/* ===== Stock VC (live) — UI + export ===== */
+async function loadVCLive(filterMat) {
+  const params = { stock: "vc" };
+  if (filterMat && filterMat.trim()) params.mat = filterMat.trim();
+  const r = await apiGet(params); // { headers, rows, total }
+
+  const host = document.getElementById("a_vc_table");
+  if (!host) return;
+  const tableHtml = r && r.rows && r.rows.length ? toTable(r.headers || ["Matériel","Quantité"], r.rows)
+                                                 : "Aucune donnée.";
+  host.innerHTML = tableHtml + `<div class="muted" style="margin-top:6px;">Total: <b>${(r && r.total) || 0}</b></div>`;
+}
+
+async function exportVCLiveXLSX() {
+  await ensureXLSXLoaded();
+  const host = document.getElementById("a_vc_table");
+  if (!host) { alert("Section non initialisée."); return; }
+
+  // Reconstitue data depuis le DOM si déjà affiché
+  const table = host.querySelector("table");
+  let headers = ["Matériel","Quantité"], rows = [];
+  if (table) {
+    headers = Array.from(table.querySelectorAll("thead th")).map(th=>th.textContent);
+    rows = Array.from(table.querySelectorAll("tbody tr")).map(tr =>
+      Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
+    );
+  } else {
+    // Sinon, recharge depuis l’API
+    const r = await apiGet({ stock: "vc" });
+    headers = r.headers || headers;
+    rows = r.rows || rows;
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, "Stock_VC_live");
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `stock_vc_live_${today}.xlsx`);
+}
+
+/* Injecte la mini-UI dans l’onglet Avancé */
+function injectVCLivePanel() {
+  if (document.getElementById("a_vc_panel")) return;
+  const anchor = document.getElementById("a_etat_table") || document.getElementById("advanced");
+  if (!anchor) return;
+
+  const panel = document.createElement("div");
+  panel.id = "a_vc_panel";
+  panel.style.marginTop = "16px";
+  panel.innerHTML = `
+    <div class="step-block">
+      <div class="step-title">
+        <span class="step-badge">VC</span>
+        <span>Stock Voie Creuse — Temps réel</span>
+      </div>
+      <div class="step-sub">Lecture directe de la feuille <i>Stock Voie Creuse</i> (Entrées − Sorties par matériel).</div>
+    </div>
+    <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input id="a_vc_mat" type="text" placeholder="Filtrer par matériel (optionnel)" style="min-width:240px;">
+      <button id="a_vc_load">Stock VC (live)</button>
+      <button id="a_vc_export" class="secondary">Export XLSX</button>
+    </div>
+    <div id="a_vc_table" class="table-wrap scroll-x" style="margin-top:8px;"></div>
+  `;
+  anchor.insertAdjacentElement("afterend", panel);
+
+  document.getElementById("a_vc_load").addEventListener("click", ()=>{
+    const m = document.getElementById("a_vc_mat").value;
+    loadVCLive(m).catch(e=>alert("Erreur: "+e.message));
+  });
+  document.getElementById("a_vc_export").addEventListener("click", ()=>{
+    exportVCLiveXLSX().catch(e=>alert("Erreur: "+e.message));
+  });
+}
+
+
 async function apiGet(params) {
   const url = new URL(API_BASE_URL);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -558,7 +635,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
   addStepHeaders();                 // Étapes 1/2/3 visibles
   ensureDatalists();
-
+  injectVCLivePanel();
   // Dates par défaut
   setDateDefault(document.getElementById("b_j1"), 1);
   setDateDefault(document.getElementById("r_jour"), 0);
