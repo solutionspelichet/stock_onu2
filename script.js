@@ -21,6 +21,40 @@ function toTable(headers, rows) {
   const tbody = `<tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
 }
+const __charts = {};
+function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
+
+function renderBarChart(canvasId, labels, values, title){
+  destroyChart(canvasId);
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  __charts[canvasId] = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: title || '', data: values }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+}
+
+function renderStackedLine(canvasId, labels, seriesLabels, matrix, title){
+  destroyChart(canvasId);
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  const datasets = seriesLabels.map((lab, idx)=>({
+    label: lab,
+    data: matrix.map(row=>row[idx]),
+    fill: false, tension: 0.2
+  }));
+  __charts[canvasId] = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: { title: { display: !!title, text: title } },
+      interaction: { mode: 'index', intersect: false },
+      scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 12 } } }
+    }
+  });
+}
 
 /* ===== Stock VC (live) — UI + export ===== */
 async function loadVCLive(filterMat) {
@@ -33,6 +67,15 @@ async function loadVCLive(filterMat) {
   const tableHtml = r && r.rows && r.rows.length ? toTable(r.headers || ["Matériel","Quantité"], r.rows)
                                                  : "Aucune donnée.";
   host.innerHTML = tableHtml + `<div class="muted" style="margin-top:6px;">Total: <b>${(r && r.total) || 0}</b></div>`;
+}
+async function ensureChartJSLoaded(){
+  if (window.Chart) return;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload=res; s.onerror=()=>rej(new Error('CDN Chart.js introuvable'));
+    document.head.appendChild(s);
+  });
 }
 
 async function exportVCLiveXLSX() {
@@ -543,29 +586,43 @@ async function loadDashboard() {
   const F  = document.getElementById("dashFrom").value;
   const T  = document.getElementById("dashTo").value;
   const msg = document.getElementById("dashMsg");
+
   msg.textContent = "Chargement…"; msg.className = "muted";
   try {
-    const r = await apiGetDashboard(J, J1, F, T);
-    renderBlock("dashStockVC", r.stockVC);
-    renderBlock("dashEntBibJ", r.entreesBiblioJour);
-    renderBlock("dashEntBibJ1Plan", r.entreesBiblioJplus1_plan);
-    renderBlock("dashEntBibJ1Real", r.entreesBiblioJplus1_reelles);
-    renderBlock("dashRepartJ", r.repartJourEquipes);
-    renderBlock("dashBesoinsEqJ1", r.besoinsJplus1Equipes);
-    renderBlock("dashUsage", r.usagePivot);
+    await ensureChartJSLoaded();
 
-    document.getElementById("kpi-vc").textContent   = kpiTotalFromBlock(r.stockVC);
-    document.getElementById("kpi-bibj").textContent = kpiTotalFromBlock(r.entreesBiblioJour);
-    document.getElementById("kpi-repj").textContent = kpiTotalFromBlock(r.repartJourEquipes);
+    /* ===== 1) STOCK VC (live) ===== */
+    const vc = await apiGet({ stock: "vc" }); // {headers, rows, total}
+    // Tableau (réutilise ton renderer)
+    renderBlock("dashStockVC", { headers: vc.headers || ["Matériel","Quantité"], rows: vc.rows || [] });
+    // Bar chart Top 10
+    const top = (vc.rows || []).slice().sort((a,b)=>(+b[1])-(+a[1])).slice(0,10);
+    renderBarChart("chartVC", top.map(r=>r[0]), top.map(r=>+r[1]), "Stock VC — Top 10");
 
-    msg.textContent = `J=${r.dates?.J} • J+1=${r.dates?.J1} • Usage: ${r.dates?.from}→${r.dates?.to}`;
+    /* ===== 2) BESOINS J+1 ===== */
+    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {pivotEquipe, pivotMateriel, matrix}
+    // Matrice Équipe×Matériel en tableau
+    renderBlock("dashBesoinsEqJ1", bes.matrix);
+    // Bar “Besoins par équipe”
+    const pe = bes.pivotEquipe?.rows || [];
+    renderBarChart("chartBesoinsTeam", pe.map(r=>r[0]), pe.map(r=>+r[1]), "Besoins J+1 — par équipe");
+    // Bar “Besoins par matériel”
+    const pm = bes.pivotMateriel?.rows || [];
+    renderBarChart("chartBesoinsMat", pm.map(r=>r[0]), pm.map(r=>+r[1]), "Besoins J+1 — par matériel");
+
+    /* ===== 3) USAGE (Historique) ===== */
+    const usage = await apiGet({ usage: "series", from: F, to: T }); // { dates, teams, matrix }
+    renderStackedLine("chartUsageTeams", usage.dates || [], usage.teams || [], usage.matrix || [], "Usage quotidien — par équipe");
+
+    msg.textContent = `J=${J} • J+1=${J1} • Usage: ${F}→${T}`;
     msg.className = "ok";
-    window.__DASH_LAST__ = r;
   } catch(e) {
+    console.error(e);
     msg.textContent = "Erreur: " + e.message;
     msg.className = "error";
   }
 }
+
 async function exportDashboardXLSX() {
   const r = window.__DASH_LAST__;
   if (!r) { alert("Charge d’abord le Dashboard."); return; }
