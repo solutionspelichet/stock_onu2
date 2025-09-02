@@ -1,16 +1,37 @@
 /* =====================
  *  ONU — Suivi Stock (Front) — Trebuchet + Orange Pelichet
- *  ===================== */
+ * ===================== */
 
 /***********************
  *  Config API
  ***********************/
-const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec"; // ← remplace si besoin
+const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJPXzUMipBrzlGTR_r-Ff6OyEUnsNu-I9q-rESbBq7l2m6KLA3RJ/exec";
 
 /***********************
- *  Helpers
+ *  Dashboard sizing (uniformiser les tailles)
  ***********************/
-/* ====== DASH Containers (robuste) ====== */
+const DASH_SIZES = {
+  PIE_W: 520,  // largeur camemberts (px)
+  PIE_H: 320,  // hauteur camemberts (px)
+  LINE_H: 320  // hauteur des graphiques d’historique (px)
+};
+
+/***********************
+ *  Helpers génériques
+ ***********************/
+function escapeHtml(x) {
+  return String(x ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function slugify(s){
+  return String(s||"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"")
+    .toLowerCase();
+}
+
+/* ====== Conteneurs Dashboard ====== */
 function getDashParent() {
   return document.getElementById("dashboard")
       || document.getElementById("tab-dashboard")
@@ -29,17 +50,31 @@ function ensureDiv(id, parent) {
 }
 function wipe(el){ if(el) el.innerHTML=""; }
 
-/* ====== Chart helpers (small pies + multi-lines) ====== */
+/***********************
+ *  Chart.js helpers
+ ***********************/
 const __charts = {};
 function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
-function makeColors(n){ const arr=[]; for(let i=0;i<n;i++) arr.push(`hsl(${Math.round((360*i)/Math.max(1,n))} 70% 55%)`); return arr; }
+function makeColors(n){
+  const arr=[]; for(let i=0;i<n;i++) arr.push(`hsl(${Math.round((360*i)/Math.max(1,n))} 70% 55%)`);
+  return arr;
+}
+async function ensureChartJSLoaded(){
+  if (window.Chart) return;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload=res; s.onerror=()=>rej(new Error('CDN Chart.js introuvable'));
+    document.head.appendChild(s);
+  });
+}
 
 function renderPieChart(canvasId, labels, values, title){
   destroyChart(canvasId);
   const el=document.getElementById(canvasId);
   if(!el) return;
 
-  // — Uniformise la taille de tous les camemberts —
+  // Taille uniforme pour tous les camemberts
   el.style.width  = `${DASH_SIZES.PIE_W}px`;
   el.style.maxWidth = `${DASH_SIZES.PIE_W}px`;
   el.style.height = `${DASH_SIZES.PIE_H}px`;
@@ -58,19 +93,21 @@ function renderPieChart(canvasId, labels, values, title){
     }
   });
 }
-
 function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
   destroyChart(canvasId);
   const el=document.getElementById(canvasId);
   if(!el) return;
 
-  // — Hauteur identique pour tous les graphiques d’historique —
+  // Hauteur identique pour tous les historiques
   el.style.width  = "100%";
   el.style.height = `${DASH_SIZES.LINE_H}px`;
 
   const mats=Object.keys(seriesByMat);
   const colors=makeColors(mats.length);
-  const datasets=mats.map((m,i)=>({ label:m, data:seriesByMat[m], fill:false, tension:0.2, borderColor:colors[i], pointRadius:2 }));
+  const datasets=mats.map((m,i)=>({
+    label:m, data:seriesByMat[m], fill:false, tension:0.2,
+    borderColor:colors[i], pointRadius:2
+  }));
   __charts[canvasId]=new Chart(el.getContext('2d'),{
     type:'line',
     data:{ labels: dates, datasets },
@@ -90,195 +127,28 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
   });
 }
 
-
-
-
-function escapeHtml(x) {
-  return String(x ?? "")
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
-function slugify(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"").toLowerCase(); }
-function ensureDiv(id, parent=document.getElementById("dashboard")){
-  let el=document.getElementById(id);
-  if(!el){ el=document.createElement("div"); el.id=id; parent?.appendChild(el); }
-  return el;
-}
-function wipe(el){ if(el) el.innerHTML=""; }
-
-function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
-function makeColors(n){
-  // palette HSL simple et lisible
-  const arr=[]; for(let i=0;i<n;i++) arr.push(`hsl(${Math.round((360*i)/Math.max(1,n))} 70% 55%)`);
-  return arr;
-}
-function renderPieChart(canvasId, labels, values, title){
-  destroyChart(canvasId);
-  const el=document.getElementById(canvasId);
-  if(!el) return;
-  const colors=makeColors(values.length);
-  __charts[canvasId]=new Chart(el.getContext('2d'),{
-    type:'pie',
-    data:{ labels, datasets:[{ data: values, backgroundColor: colors }] },
-    options:{ responsive:true, plugins:{ title:{ display:!!title, text:title }, legend:{ position:'bottom' } } }
-  });
-}
-function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
-  // seriesByMat: { mat: [q per date], ... }
-  destroyChart(canvasId);
-  const el=document.getElementById(canvasId);
-  if(!el) return;
-  const mats=Object.keys(seriesByMat);
-  const colors=makeColors(mats.length);
-  const datasets=mats.map((m,i)=>({ label:m, data:seriesByMat[m], fill:false, tension:0.2, borderColor:colors[i] }));
-  __charts[canvasId]=new Chart(el.getContext('2d'),{
-    type:'line',
-    data:{ labels: dates, datasets },
-    options:{
-      responsive:true,
-      plugins:{ title:{ display:!!title, text:title }, legend:{ position:'bottom' } },
-      interaction:{ mode:'index', intersect:false },
-      scales:{ x:{ ticks:{ autoSkip:true, maxTicksLimit:12 } } }
-    }
-  });
-}
-
+/***********************
+ *  Rendu tables & XLSX
+ ***********************/
 function toTable(headers, rows) {
   if (!Array.isArray(rows) || rows.length === 0) return "Aucune donnée.";
   const thead = `<thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
   const tbody = `<tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
 }
-
-function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
-
-function renderBarChart(canvasId, labels, values, title){
-  destroyChart(canvasId);
-  const el = document.getElementById(canvasId);
-  if (!el) return;
-  __charts[canvasId] = new Chart(el.getContext('2d'), {
-    type: 'bar',
-    data: { labels, datasets: [{ label: title || '', data: values }] },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
-}
-
-function renderStackedLine(canvasId, labels, seriesLabels, matrix, title){
-  destroyChart(canvasId);
-  const el = document.getElementById(canvasId);
-  if (!el) return;
-  const datasets = seriesLabels.map((lab, idx)=>({
-    label: lab,
-    data: matrix.map(row=>row[idx]),
-    fill: false, tension: 0.2
-  }));
-  __charts[canvasId] = new Chart(el.getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      plugins: { title: { display: !!title, text: title } },
-      interaction: { mode: 'index', intersect: false },
-      scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 12 } } }
-    }
-  });
-}
-async function ensureChartJSLoaded(){
-  if (window.Chart) return;
-  await new Promise((res,rej)=>{
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
-    s.onload=res; s.onerror=()=>rej(new Error('CDN Chart.js introuvable'));
+async function ensureXLSXLoaded() {
+  if (window.XLSX) return;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js";
+    s.onload = res; s.onerror = () => rej(new Error("CDN XLSX introuvable"));
     document.head.appendChild(s);
   });
 }
 
-/* ===== Stock VC (live) — UI + export ===== */
-async function loadVCLive(filterMat) {
-  const params = { stock: "vc" };
-  if (filterMat && filterMat.trim()) params.mat = filterMat.trim();
-  const r = await apiGet(params); // { headers, rows, total }
-
-  const host = document.getElementById("a_vc_table");
-  if (!host) return;
-  const tableHtml = r && r.rows && r.rows.length ? toTable(r.headers || ["Matériel","Quantité"], r.rows)
-                                                 : "Aucune donnée.";
-  host.innerHTML = tableHtml + `<div class="muted" style="margin-top:6px;">Total: <b>${(r && r.total) || 0}</b></div>`;
-}
-async function ensureChartJSLoaded(){
-  if (window.Chart) return;
-  await new Promise((res,rej)=>{
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
-    s.onload=res; s.onerror=()=>rej(new Error('CDN Chart.js introuvable'));
-    document.head.appendChild(s);
-  });
-}
-
-async function exportVCLiveXLSX() {
-  await ensureXLSXLoaded();
-  const host = document.getElementById("a_vc_table");
-  if (!host) { alert("Section non initialisée."); return; }
-
-  // Reconstitue data depuis le DOM si déjà affiché
-  const table = host.querySelector("table");
-  let headers = ["Matériel","Quantité"], rows = [];
-  if (table) {
-    headers = Array.from(table.querySelectorAll("thead th")).map(th=>th.textContent);
-    rows = Array.from(table.querySelectorAll("tbody tr")).map(tr =>
-      Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
-    );
-  } else {
-    // Sinon, recharge depuis l’API
-    const r = await apiGet({ stock: "vc" });
-    headers = r.headers || headers;
-    rows = r.rows || rows;
-  }
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  XLSX.utils.book_append_sheet(wb, ws, "Stock_VC_live");
-  const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `stock_vc_live_${today}.xlsx`);
-}
-
-/* Injecte la mini-UI dans l’onglet Avancé */
-function injectVCLivePanel() {
-  if (document.getElementById("a_vc_panel")) return;
-  const anchor = document.getElementById("a_etat_table") || document.getElementById("advanced");
-  if (!anchor) return;
-
-  const panel = document.createElement("div");
-  panel.id = "a_vc_panel";
-  panel.style.marginTop = "16px";
-  panel.innerHTML = `
-    <div class="step-block">
-      <div class="step-title">
-        <span class="step-badge">VC</span>
-        <span>Stock Voie Creuse — Temps réel</span>
-      </div>
-      <div class="step-sub">Lecture directe de la feuille <i>Stock Voie Creuse</i> (Entrées − Sorties par matériel).</div>
-    </div>
-    <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input id="a_vc_mat" type="text" placeholder="Filtrer par matériel (optionnel)" style="min-width:240px;">
-      <button id="a_vc_load">Stock VC (live)</button>
-      <button id="a_vc_export" class="secondary">Export XLSX</button>
-    </div>
-    <div id="a_vc_table" class="table-wrap scroll-x" style="margin-top:8px;"></div>
-  `;
-  anchor.insertAdjacentElement("afterend", panel);
-
-  document.getElementById("a_vc_load").addEventListener("click", ()=>{
-    const m = document.getElementById("a_vc_mat").value;
-    loadVCLive(m).catch(e=>alert("Erreur: "+e.message));
-  });
-  document.getElementById("a_vc_export").addEventListener("click", ()=>{
-    exportVCLiveXLSX().catch(e=>alert("Erreur: "+e.message));
-  });
-}
-
-
+/***********************
+ *  API helpers
+ ***********************/
 async function apiGet(params) {
   const url = new URL(API_BASE_URL);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -316,7 +186,9 @@ function initTabs() {
   });
 }
 
-/* ===== Étapes visuelles Réappro ===== */
+/***********************
+ *  Étapes visuelles Réappro
+ ***********************/
 function injectStepStyles() {
   if (document.getElementById("step-styles")) return;
   const s = document.createElement("style");
@@ -351,26 +223,22 @@ function addStepHeaders() {
   const a3 = document.getElementById("r_jour1");  // Plan J+1
 
   insertStepHeader(
-    a1,
-    1,
-    "Besoins J+1 — Saisie",
+    a1, 1, "Besoins J+1 — Saisie",
     "Saisir les besoins par équipe et par matériel pour le jour J+1 (la date par défaut est demain)."
   );
   insertStepHeader(
-    a2,
-    2,
-    "Clôture J — Restes d'équipe",
+    a2, 2, "Clôture J — Restes d'équipe",
     "Enregistrer les restes de fin de journée (J). La zone reprend automatiquement la valeur de l’équipe."
   );
   insertStepHeader(
-    a3,
-    3,
-    "Plan J+1 — Calcul / Mouvements",
+    a3, 3, "Plan J+1 — Calcul / Mouvements",
     "Calculer le plan (besoin = cible − reste), puis générer les mouvements Voie Creuse → Bibliothèque et Bibliothèque → Équipes."
   );
 }
 
-/* ===== Réordonnancement : Plan après Clôture ===== */
+/***********************
+ *  Réordonner : Plan après Clôture
+ ***********************/
 function smallestCommonAncestor_(ids) {
   const els = ids.map(id => document.getElementById(id)).filter(Boolean);
   if (!els.length) return null;
@@ -382,18 +250,14 @@ function smallestCommonAncestor_(ids) {
   return null;
 }
 function reorderReapproSections() {
-  // Trouve les racines de section
   const planRoot   = smallestCommonAncestor_(['r_jour1','r_calc','r_details','r_agregat']);
   const clotRoot   = smallestCommonAncestor_(['c_date','c_equipe','c_save']);
   if (!clotRoot || !planRoot || clotRoot === planRoot) return;
 
-  // Récupère l’en-tête Étape 3 (si présent)
   const planAnchor = document.getElementById('r_jour1');
   const planHeader = (planAnchor && planAnchor.previousElementSibling && planAnchor.previousElementSibling.classList?.contains('step-block'))
-    ? planAnchor.previousElementSibling
-    : null;
+    ? planAnchor.previousElementSibling : null;
 
-  // Déplace l’entête puis la section Plan juste après la section Clôture
   if (planHeader) {
     clotRoot.insertAdjacentElement('afterend', planHeader);
     planHeader.insertAdjacentElement('afterend', planRoot);
@@ -424,7 +288,6 @@ function ensureDatalists() {
   const zoneInput = document.getElementById("c_zone");
   if (zoneInput) zoneInput.setAttribute("list", "zone_options");
 }
-
 function setOptions(selectEl, options, keepValue=true) {
   if (!selectEl) return;
   const old = keepValue ? selectEl.value : "";
@@ -436,7 +299,6 @@ function setOptions(selectEl, options, keepValue=true) {
   });
   if (keepValue && old && options.includes(old)) selectEl.value = old;
 }
-
 function rebuildMaterialSelectsInTable() {
   document.querySelectorAll("select.b_mat, select.c_mat, select.vcinit_mat").forEach(sel=>{
     const old = sel.value;
@@ -445,14 +307,19 @@ function rebuildMaterialSelectsInTable() {
     if (old && REF_MAT.includes(old)) sel.value = old;
   });
 }
-
-
+function rebuildVCInitSelects() {
+  document.querySelectorAll("select.vcinit_mat").forEach(sel=>{
+    const old = sel.value;
+    sel.innerHTML = `<option value="">— choisir —</option>` +
+      (REF_MAT||[]).map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    if (old && REF_MAT.includes(old)) sel.value = old;
+  });
+}
 function refreshZoneDatalist() {
   const dl = document.getElementById("zone_options");
   if (!dl) return;
   dl.innerHTML = (REF_EQ||[]).map(z=>`<option value="${escapeHtml(z)}"></option>`).join("");
 }
-
 async function loadReferentials() {
   ensureDatalists();
   let eq = [], mat = [];
@@ -474,7 +341,7 @@ async function loadReferentials() {
   setOptions(document.getElementById("b_equipe"), REF_EQ);
   setOptions(document.getElementById("c_equipe"), REF_EQ);
   rebuildMaterialSelectsInTable();
-  rebuildVCInitSelects()
+  rebuildVCInitSelects();
   refreshZoneDatalist();
 
   console.log("Référentiels chargés:", { equipes: REF_EQ.length, materiels: REF_MAT.length });
@@ -516,7 +383,6 @@ function b_addRow(matDefault="", cibleDefault="") {
   tr.append(tdMat, tdCible, tdCom, tdDel);
   tbody.appendChild(tr);
 }
-
 async function b_save() {
   const dateJ1 = document.getElementById("b_j1").value;
   const equipe = document.getElementById("b_equipe").value;
@@ -608,7 +474,6 @@ function setupClotureEditor() {
 
   addBtn.addEventListener("click", ()=> c_addRow());
 }
-
 function c_addRow(matDefault="", qtyDefault="") {
   const tbody = document.querySelector("#c_table tbody");
   const tr = document.createElement("tr");
@@ -637,7 +502,6 @@ function c_addRow(matDefault="", qtyDefault="") {
   tr.append(tdMat, tdQty, tdDel);
   tbody.appendChild(tr);
 }
-
 function c_collectLines() {
   const rows = Array.from(document.querySelectorAll("#c_table tbody tr"));
   const lignes = [];
@@ -649,7 +513,6 @@ function c_collectLines() {
   }
   return lignes;
 }
-
 function parseTextLinesToRows(txt) {
   const out = [];
   (txt||"").split(/\r?\n/).forEach(line=>{
@@ -662,7 +525,6 @@ function parseTextLinesToRows(txt) {
   });
   return out;
 }
-
 async function saveRestes() {
   const d = document.getElementById("c_date").value;
   const equipe = document.getElementById("c_equipe").value;
@@ -682,28 +544,8 @@ async function saveRestes() {
 }
 
 /***********************
- *  Dashboard (+ KPIs)
+ *  Dashboard (camemberts + historiques)
  ***********************/
-// === Dashboard sizing (uniformiser les tailles) ===
-const DASH_SIZES = {
-  // Camemberts : 2x la version réduite (~260x160) => ~520x320
-  PIE_W: 520,  // px
-  PIE_H: 320,  // px
-
-  // Hauteur unique pour tous les graphiques d'historique (lignes)
-  LINE_H: 320  // px
-};
-
-
-async function ensureXLSXLoaded() {
-  if (window.XLSX) return;
-  await new Promise((res, rej) => {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js";
-    s.onload = res; s.onerror = () => rej(new Error("CDN XLSX introuvable"));
-    document.head.appendChild(s);
-  });
-}
 function renderBlock(elId, block) {
   const el = document.getElementById(elId);
   if (!el) return;
@@ -740,8 +582,8 @@ async function loadDashboard() {
   try {
     await ensureChartJSLoaded();
 
-    /* ========== 1) STOCK VC (live) — camembert réduit ========== */
-    const vc = await apiGet({ stock: "vc" }); // {headers, rows, total}
+    /* ========== 1) STOCK VC (live) — camembert ========== */
+    const vc = await apiGet({ stock: "vc" });
     renderBlock("dashStockVC", { headers: vc.headers || ["Matériel","Quantité"], rows: vc.rows || [] });
 
     const wrapVC = ensureDiv("chartVCPieWrap");
@@ -757,17 +599,19 @@ async function loadDashboard() {
     const valuesVC = (vc.rows||[]).map(r=>+r[1]);
     renderPieChart("chartVCPie", labelsVC, valuesVC, "");
 
-    /* ========== 2) BESOINS J+1 — un camembert/équipe (réduit) ========== */
-    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {rowsEquipe, matrix,...}
-    renderBlock("dashBesoinsEqJ1", bes.matrix); // tableau matrice (optionnel)
+    /* ========== 2) BESOINS J+1 — un camembert/équipe ========== */
+    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {rowsEquipe, matrix, ...}
+    renderBlock("dashBesoinsEqJ1", bes.matrix); // matrice en tableau (optionnel)
 
     const wrapBes = ensureDiv("chartBesoinsPerTeamWrap");
     wipe(wrapBes);
     wrapBes.innerHTML = `<h3 style="margin:6px 0 8px;">Besoins J+1 — répartition par équipe</h3>
-                         <div id="besTeamGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;"></div>`;
+                         <div id="besTeamGrid" style="display:grid;gap:12px;"></div>`;
     const grid = document.getElementById("besTeamGrid");
+    grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${DASH_SIZES.PIE_W + 60}px, 1fr))`;
 
-    const group = new Map(); // eq -> Map(mat->q)
+    // Regrouper par équipe → { équipe -> Map(mat -> somme) }
+    const group = new Map();
     (bes.rowsEquipe||[]).forEach(([eq, mat, q])=>{
       if(!group.has(eq)) group.set(eq, new Map());
       const cur = group.get(eq).get(mat)||0;
@@ -811,10 +655,9 @@ async function loadDashboard() {
       if (di>=0) m.get(mat)[di] += (+q||0);
     });
 
-    // Grille responsive pour les graphes d’usage
     const gridU = document.createElement("div");
     gridU.style.display = "grid";
-    gridU.style.gridTemplateColumns = "repeat(auto-fill, minmax(340px, 1fr))";
+    gridU.style.gridTemplateColumns = `repeat(auto-fill, minmax(${Math.max(360, DASH_SIZES.PIE_W)}px, 1fr))`;
     gridU.style.gap = "12px";
     wrapUsage.appendChild(gridU);
 
@@ -839,13 +682,14 @@ async function loadDashboard() {
     msg.className = "error";
   }
 }
-
-
-
 async function exportDashboardXLSX() {
-  const r = window.__DASH_LAST__;
-  if (!r) { alert("Charge d’abord le Dashboard."); return; }
   await ensureXLSXLoaded();
+  const J  = document.getElementById("dashJ").value;
+  const J1 = document.getElementById("dashJ1").value;
+  const F  = document.getElementById("dashFrom").value;
+  const T  = document.getElementById("dashTo").value;
+
+  const r = await apiGetDashboard(J, J1, F, T);
   const wb = XLSX.utils.book_new();
   const add = (name, blk)=>{
     if (!blk) return;
@@ -860,8 +704,7 @@ async function exportDashboardXLSX() {
   add("Repartition_J", r.repartJourEquipes);
   add("Besoins_J+1", r.besoinsJplus1Equipes);
   add("Usage", r.usagePivot);
-  const J = document.getElementById("dashJ").value || "J";
-  XLSX.writeFile(wb, `dashboard_${J}.xlsx`);
+  XLSX.writeFile(wb, `dashboard_${J||"J"}.xlsx`);
 }
 
 /***********************
@@ -905,13 +748,80 @@ async function doSnapshot() {
   const t = await apiText({ action: "snapshotRestes", date: today });
   alert(t);
 }
-/* ===== Stock initial Voie Creuse — UI ===== */
 
-// Injecte le panneau dans l’onglet Avancé
+/* ===== Stock VC (live) — UI + export ===== */
+async function loadVCLive(filterMat) {
+  const params = { stock: "vc" };
+  if (filterMat && filterMat.trim()) params.mat = filterMat.trim();
+  const r = await apiGet(params);
+
+  const host = document.getElementById("a_vc_table");
+  if (!host) return;
+  const tableHtml = r && r.rows && r.rows.length ? toTable(r.headers || ["Matériel","Quantité"], r.rows)
+                                                 : "Aucune donnée.";
+  host.innerHTML = tableHtml + `<div class="muted" style="margin-top:6px;">Total: <b>${(r && r.total) || 0}</b></div>`;
+}
+async function exportVCLiveXLSX() {
+  await ensureXLSXLoaded();
+  const host = document.getElementById("a_vc_table");
+  if (!host) { alert("Section non initialisée."); return; }
+
+  const table = host.querySelector("table");
+  let headers = ["Matériel","Quantité"], rows = [];
+  if (table) {
+    headers = Array.from(table.querySelectorAll("thead th")).map(th=>th.textContent);
+    rows = Array.from(table.querySelectorAll("tbody tr")).map(tr =>
+      Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
+    );
+  } else {
+    const r = await apiGet({ stock: "vc" });
+    headers = r.headers || headers;
+    rows = r.rows || rows;
+  }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, "Stock_VC_live");
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `stock_vc_live_${today}.xlsx`);
+}
+function injectVCLivePanel() {
+  if (document.getElementById("a_vc_panel")) return;
+  const anchor = document.getElementById("a_etat_table") || document.getElementById("advanced");
+  if (!anchor) return;
+
+  const panel = document.createElement("div");
+  panel.id = "a_vc_panel";
+  panel.style.marginTop = "16px";
+  panel.innerHTML = `
+    <div class="step-block">
+      <div class="step-title">
+        <span class="step-badge">VC</span>
+        <span>Stock Voie Creuse — Temps réel</span>
+      </div>
+      <div class="step-sub">Lecture directe de la feuille <i>Stock Voie Creuse</i> (Entrées − Sorties par matériel).</div>
+    </div>
+    <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input id="a_vc_mat" type="text" placeholder="Filtrer par matériel (optionnel)" style="min-width:240px;">
+      <button id="a_vc_load">Stock VC (live)</button>
+      <button id="a_vc_export" class="secondary">Export XLSX</button>
+    </div>
+    <div id="a_vc_table" class="table-wrap scroll-x" style="margin-top:8px;"></div>
+  `;
+  anchor.insertAdjacentElement("afterend", panel);
+
+  document.getElementById("a_vc_load").addEventListener("click", ()=>{
+    const m = document.getElementById("a_vc_mat").value;
+    loadVCLive(m).catch(e=>alert("Erreur: "+e.message));
+  });
+  document.getElementById("a_vc_export").addEventListener("click", ()=>{
+    exportVCLiveXLSX().catch(e=>alert("Erreur: "+e.message));
+  });
+}
+
+/* ===== Voie Creuse — Stock initial (one-shot) ===== */
 function injectVCInitialPanel() {
   if (document.getElementById("vcinit_panel")) return;
 
-  // On place le bloc juste après l’état par zone (si présent), sinon à la fin de l’onglet avancé
   const anchor = document.getElementById("a_vc_panel")
              ||  document.getElementById("a_etat_table")
              ||  document.getElementById("advanced");
@@ -957,24 +867,18 @@ function injectVCInitialPanel() {
   `;
   anchor.insertAdjacentElement("afterend", panel);
 
-  // Branche les actions
   document.getElementById("vcinit_add").addEventListener("click", ()=> vcInit_addRow());
   document.getElementById("vcinit_save").addEventListener("click", saveVCInitial);
 
-  // Date = aujourd’hui par défaut
   const d = document.getElementById("vcinit_date");
   if (d) setDateDefault(d, 0);
 
-  // Si REF_MAT est déjà chargé, remplir les selects ; sinon, loadReferentials le fera
   rebuildVCInitSelects();
 }
-
-// Ajoute une ligne (Matériel, Quantité) au tableau
 function vcInit_addRow(matDefault="", qtyDefault="") {
   const tbody = document.querySelector("#vcinit_table tbody");
   const tr = document.createElement("tr");
 
-  // Matériel (select)
   const tdMat = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "vcinit_mat";
@@ -983,15 +887,13 @@ function vcInit_addRow(matDefault="", qtyDefault="") {
   if (matDefault) sel.value = matDefault;
   tdMat.appendChild(sel);
 
-  // Quantité (number + datalist)
   const tdQty = document.createElement("td");
   const qty = document.createElement("input");
   qty.type = "number"; qty.min = "0"; qty.step = "1"; qty.value = qtyDefault || "";
   qty.className = "vcinit_qty";
-  qty.setAttribute("list","qty_options"); // utilise ton datalist de quantités si présent
+  qty.setAttribute("list","qty_options");
   tdQty.appendChild(qty);
 
-  // Supprimer ligne
   const tdDel = document.createElement("td");
   const btn = document.createElement("button");
   btn.textContent = "✕"; btn.className = "secondary";
@@ -1001,32 +903,17 @@ function vcInit_addRow(matDefault="", qtyDefault="") {
   tr.append(tdMat, tdQty, tdDel);
   tbody.appendChild(tr);
 }
-
-// Met à jour les selects de cette section (appelé après loadReferentials)
-function rebuildVCInitSelects() {
-  document.querySelectorAll("select.vcinit_mat").forEach(sel=>{
-    const old = sel.value;
-    sel.innerHTML = `<option value="">— choisir —</option>` +
-      (REF_MAT||[]).map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-    if (old && REF_MAT.includes(old)) sel.value = old;
-  });
-}
-
-// Récupère les lignes, agrège les doublons de matériel
 function vcInit_collectLinesAggregated() {
   const rows = Array.from(document.querySelectorAll("#vcinit_table tbody tr"));
-  const map = new Map(); // mat -> somme
+  const map = new Map();
   for (const tr of rows) {
     const mat = tr.querySelector(".vcinit_mat")?.value || "";
     const q   = parseInt(tr.querySelector(".vcinit_qty")?.value || "0", 10) || 0;
     if (!mat || q <= 0) continue;
     map.set(mat, (map.get(mat) || 0) + q);
   }
-  // Transforme en [{materiel, quantite}]
   return Array.from(map.entries()).map(([materiel, quantite]) => ({ materiel, quantite }));
 }
-
-// Envoie à l’API (action=vcSetInitial)
 async function saveVCInitial() {
   const date = document.getElementById("vcinit_date")?.value;
   if (!date) return alert("Indique la date du stock initial.");
@@ -1041,11 +928,10 @@ async function saveVCInitial() {
     });
     alert(msg);
 
-    // Reset table & afficher le stock live mis à jour si ton module est présent
     const tbody = document.querySelector("#vcinit_table tbody");
     if (tbody) tbody.innerHTML = "";
     if (typeof loadVCLive === "function") {
-      await loadVCLive(); // recharge le tableau "Stock VC (live)" si tu l’utilises
+      await loadVCLive();
     }
   } catch(e) {
     alert("Erreur: " + e.message);
@@ -1057,11 +943,12 @@ async function saveVCInitial() {
  ***********************/
 document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
-  addStepHeaders();                 // Étapes 1/2/3 visibles
+  addStepHeaders();
   ensureDatalists();
-  injectVCLivePanel?.();     // si tu utilises déjà le panel "Stock VC (live)"
+  injectVCLivePanel?.();
   injectVCInitialPanel();
-  // Dates par défaut
+
+  // Dates par défaut (Réappro)
   setDateDefault(document.getElementById("b_j1"), 1);
   setDateDefault(document.getElementById("r_jour"), 0);
   setDateDefault(document.getElementById("r_jour1"), 1);
@@ -1083,7 +970,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setDateDefault(document.getElementById("c_date"), 0);
   document.getElementById("c_save").addEventListener("click", saveRestes);
 
-  // ➜ Réordonner : placer Plan après Clôture
+  // Réordonner : Plan après Clôture
   reorderReapproSections();
 
   // Plan & mouvements
@@ -1091,7 +978,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("r_gen_vc_bib").addEventListener("click", ()=> actionGenererVCAversBiblio(document.getElementById("r_jour1").value));
   document.getElementById("r_distribuer").addEventListener("click", ()=> actionDistribuerBiblioEquipes(document.getElementById("r_jour1").value));
 
-  // Dashboard
+  // Dashboard — dates par défaut
   const today = new Date(), tomorrow = new Date(); tomorrow.setDate(today.getDate()+1);
   const fmt = d => d.toISOString().slice(0,10);
   document.getElementById("dashJ").value  = fmt(today);
@@ -1109,7 +996,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("a_snapshot").addEventListener("click", doSnapshot);
   document.getElementById("a_lock").addEventListener("change", toggleSnapshotLock);
 
-  // “↻ Recharger” => ne recharge que les référentiels
+  // “↻ Recharger” référentiels
   document.getElementById("btnReload").addEventListener("click", async ()=>{
     await loadReferentials();
     alert("Référentiels (équipes & matériels) rechargés.");
