@@ -15,6 +15,52 @@ function escapeHtml(x) {
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+
+function slugify(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"").toLowerCase(); }
+function ensureDiv(id, parent=document.getElementById("dashboard")){
+  let el=document.getElementById(id);
+  if(!el){ el=document.createElement("div"); el.id=id; parent?.appendChild(el); }
+  return el;
+}
+function wipe(el){ if(el) el.innerHTML=""; }
+const __charts = {};
+function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
+function makeColors(n){
+  // palette HSL simple et lisible
+  const arr=[]; for(let i=0;i<n;i++) arr.push(`hsl(${Math.round((360*i)/Math.max(1,n))} 70% 55%)`);
+  return arr;
+}
+function renderPieChart(canvasId, labels, values, title){
+  destroyChart(canvasId);
+  const el=document.getElementById(canvasId);
+  if(!el) return;
+  const colors=makeColors(values.length);
+  __charts[canvasId]=new Chart(el.getContext('2d'),{
+    type:'pie',
+    data:{ labels, datasets:[{ data: values, backgroundColor: colors }] },
+    options:{ responsive:true, plugins:{ title:{ display:!!title, text:title }, legend:{ position:'bottom' } } }
+  });
+}
+function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
+  // seriesByMat: { mat: [q per date], ... }
+  destroyChart(canvasId);
+  const el=document.getElementById(canvasId);
+  if(!el) return;
+  const mats=Object.keys(seriesByMat);
+  const colors=makeColors(mats.length);
+  const datasets=mats.map((m,i)=>({ label:m, data:seriesByMat[m], fill:false, tension:0.2, borderColor:colors[i] }));
+  __charts[canvasId]=new Chart(el.getContext('2d'),{
+    type:'line',
+    data:{ labels: dates, datasets },
+    options:{
+      responsive:true,
+      plugins:{ title:{ display:!!title, text:title }, legend:{ position:'bottom' } },
+      interaction:{ mode:'index', intersect:false },
+      scales:{ x:{ ticks:{ autoSkip:true, maxTicksLimit:12 } } }
+    }
+  });
+}
+
 function toTable(headers, rows) {
   if (!Array.isArray(rows) || rows.length === 0) return "Aucune donnée.";
   const thead = `<thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
@@ -53,6 +99,15 @@ function renderStackedLine(canvasId, labels, seriesLabels, matrix, title){
       interaction: { mode: 'index', intersect: false },
       scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 12 } } }
     }
+  });
+}
+async function ensureChartJSLoaded(){
+  if (window.Chart) return;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload=res; s.onerror=()=>rej(new Error('CDN Chart.js introuvable'));
+    document.head.appendChild(s);
   });
 }
 
@@ -591,28 +646,89 @@ async function loadDashboard() {
   try {
     await ensureChartJSLoaded();
 
-    /* ===== 1) STOCK VC (live) ===== */
+    /* =======================
+     * 1) STOCK VC (live) — camembert
+     * ======================= */
     const vc = await apiGet({ stock: "vc" }); // {headers, rows, total}
-    // Tableau (réutilise ton renderer)
+    // Tableau existant (si tu l’utilises) :
     renderBlock("dashStockVC", { headers: vc.headers || ["Matériel","Quantité"], rows: vc.rows || [] });
-    // Bar chart Top 10
-    const top = (vc.rows || []).slice().sort((a,b)=>(+b[1])-(+a[1])).slice(0,10);
-    renderBarChart("chartVC", top.map(r=>r[0]), top.map(r=>+r[1]), "Stock VC — Top 10");
 
-    /* ===== 2) BESOINS J+1 ===== */
-    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {pivotEquipe, pivotMateriel, matrix}
-    // Matrice Équipe×Matériel en tableau
+    // Camembert
+    const wrapVC = ensureDiv("chartVCPieWrap");
+    wipe(wrapVC);
+    const c1 = document.createElement("canvas");
+    c1.id = "chartVCPie"; c1.height = 160;
+    wrapVC.innerHTML = `<div class="card"><h3>Stock Voie Creuse — répartition</h3></div>`;
+    wrapVC.querySelector(".card").appendChild(c1);
+    const labelsVC = (vc.rows||[]).map(r=>r[0]);
+    const valuesVC = (vc.rows||[]).map(r=>+r[1]);
+    renderPieChart("chartVCPie", labelsVC, valuesVC, "Répartition par matériel");
+    // total
+    const totalDiv = document.createElement("div");
+    totalDiv.className="muted"; totalDiv.style.marginTop="6px"; totalDiv.textContent = `Total: ${vc.total||0}`;
+    wrapVC.querySelector(".card").appendChild(totalDiv);
+
+    /* =======================
+     * 2) BESOINS J+1 — un camembert par équipe
+     * ======================= */
+    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {rowsEquipe, matrix, pivot...}
+    // Matrice en tableau (optionnel, garde si tu veux) :
     renderBlock("dashBesoinsEqJ1", bes.matrix);
-    // Bar “Besoins par équipe”
-    const pe = bes.pivotEquipe?.rows || [];
-    renderBarChart("chartBesoinsTeam", pe.map(r=>r[0]), pe.map(r=>+r[1]), "Besoins J+1 — par équipe");
-    // Bar “Besoins par matériel”
-    const pm = bes.pivotMateriel?.rows || [];
-    renderBarChart("chartBesoinsMat", pm.map(r=>r[0]), pm.map(r=>+r[1]), "Besoins J+1 — par matériel");
 
-    /* ===== 3) USAGE (Historique) ===== */
-    const usage = await apiGet({ usage: "series", from: F, to: T }); // { dates, teams, matrix }
-    renderStackedLine("chartUsageTeams", usage.dates || [], usage.teams || [], usage.matrix || [], "Usage quotidien — par équipe");
+    const wrapBes = ensureDiv("chartBesoinsPerTeamWrap");
+    wipe(wrapBes);
+    wrapBes.innerHTML = `<h3>Besoins J+1 — répartition par équipe</h3>`;
+    // Regrouper rowsEquipe: [Equipe, Matériel, Cible]
+    const group = new Map();
+    (bes.rowsEquipe||[]).forEach(row=>{
+      const eq=row[0], mat=row[1], q=+row[2]||0;
+      if(!group.has(eq)) group.set(eq, new Map());
+      group.get(eq).set(mat, (group.get(eq).get(mat)||0)+q);
+    });
+    // Créer une carte + camembert par équipe
+    Array.from(group.keys()).sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base',numeric:true})).forEach(eq=>{
+      const card = document.createElement("div");
+      card.className = "card"; card.style.marginTop="12px";
+      const canvasId = `chartBesTeam_${slugify(eq)}`;
+      card.innerHTML = `<h4>${escapeHtml(eq)}</h4><canvas id="${canvasId}" height="160"></canvas>`;
+      wrapBes.appendChild(card);
+      const mats = Array.from(group.get(eq).keys());
+      const vals = mats.map(m=>group.get(eq).get(m));
+      renderPieChart(canvasId, mats, vals, `Répartition des matériels pour ${eq}`);
+    });
+
+    /* =======================
+     * 3) HISTORIQUE D’USAGE — un graph/équipe, 1 courbe par matériel
+     * ======================= */
+    const usage = await apiGet({ usage: "series", from: F, to: T }); // { dates, teams, matrix, raw }
+    const wrapUsage = ensureDiv("chartUsagePerTeamWrap");
+    wipe(wrapUsage);
+    wrapUsage.innerHTML = `<h3>Usage quotidien — par équipe (1 courbe par matériel)</h3>`;
+
+    // On pivote depuis usage.raw: [date, équipe, matériel, qty]
+    const dates = usage.dates || [];
+    const raw   = usage.raw   || [];
+    // par équipe -> par matériel -> série par date
+    const byTeam = new Map();
+    raw.forEach(([d, eq, mat, q])=>{
+      if(!byTeam.has(eq)) byTeam.set(eq, new Map());
+      if(!byTeam.get(eq).has(mat)) byTeam.get(eq).set(mat, Array(dates.length).fill(0));
+      const di = dates.indexOf(d);
+      if (di>=0) byTeam.get(eq).get(mat)[di] += (+q||0);
+    });
+
+    Array.from(byTeam.keys()).sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base',numeric:true})).forEach(eq=>{
+      const card = document.createElement("div");
+      card.className = "card"; card.style.marginTop="12px";
+      const canvasId = `chartUsage_${slugify(eq)}`;
+      card.innerHTML = `<h4>${escapeHtml(eq)}</h4><canvas id="${canvasId}" height="200"></canvas>`;
+      wrapUsage.appendChild(card);
+
+      // séries par matériel pour cette équipe
+      const seriesByMat = {};
+      byTeam.get(eq).forEach((arr, mat)=>{ seriesByMat[mat]=arr; });
+      renderLinesByMaterial(canvasId, dates, seriesByMat, `Usage ${eq} (${F} → ${T})`);
+    });
 
     msg.textContent = `J=${J} • J+1=${J1} • Usage: ${F}→${T}`;
     msg.className = "ok";
@@ -622,6 +738,7 @@ async function loadDashboard() {
     msg.className = "error";
   }
 }
+
 
 async function exportDashboardXLSX() {
   const r = window.__DASH_LAST__;
