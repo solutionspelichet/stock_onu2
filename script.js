@@ -38,9 +38,12 @@ function renderPieChart(canvasId, labels, values, title){
   destroyChart(canvasId);
   const el=document.getElementById(canvasId);
   if(!el) return;
-  // Taille réduite
-  el.style.maxWidth = "260px";
-  el.style.height   = "160px";
+
+  // — Uniformise la taille de tous les camemberts —
+  el.style.width  = `${DASH_SIZES.PIE_W}px`;
+  el.style.maxWidth = `${DASH_SIZES.PIE_W}px`;
+  el.style.height = `${DASH_SIZES.PIE_H}px`;
+
   const colors=makeColors(values.length);
   __charts[canvasId]=new Chart(el.getContext('2d'),{
     type:'pie',
@@ -48,7 +51,10 @@ function renderPieChart(canvasId, labels, values, title){
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      plugins:{ title:{ display:!!title, text:title, font:{ size:12 } }, legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 } } } }
+      plugins:{
+        title:{ display:!!title, text:title, font:{ size:12 } },
+        legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 } } }
+      }
     }
   });
 }
@@ -57,9 +63,11 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
   destroyChart(canvasId);
   const el=document.getElementById(canvasId);
   if(!el) return;
-  // Taille raisonnable
+
+  // — Hauteur identique pour tous les graphiques d’historique —
   el.style.width  = "100%";
-  el.style.height = "220px";
+  el.style.height = `${DASH_SIZES.LINE_H}px`;
+
   const mats=Object.keys(seriesByMat);
   const colors=makeColors(mats.length);
   const datasets=mats.map((m,i)=>({ label:m, data:seriesByMat[m], fill:false, tension:0.2, borderColor:colors[i], pointRadius:2 }));
@@ -69,12 +77,19 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      plugins:{ title:{ display:!!title, text:title, font:{ size:12 } }, legend:{ position:'bottom', labels:{ font:{ size:10 } } } },
+      plugins:{
+        title:{ display:!!title, text:title, font:{ size:12 } },
+        legend:{ position:'bottom', labels:{ font:{ size:10 } } }
+      },
       interaction:{ mode:'index', intersect:false },
-      scales:{ x:{ ticks:{ autoSkip:true, maxTicksLimit:12, font:{ size:10 } } }, y:{ ticks:{ font:{ size:10 } } } }
+      scales:{
+        x:{ ticks:{ autoSkip:true, maxTicksLimit:12, font:{ size:10 } } },
+        y:{ ticks:{ font:{ size:10 } } }
+      }
     }
   });
 }
+
 
 
 
@@ -669,6 +684,17 @@ async function saveRestes() {
 /***********************
  *  Dashboard (+ KPIs)
  ***********************/
+// === Dashboard sizing (uniformiser les tailles) ===
+const DASH_SIZES = {
+  // Camemberts : 2x la version réduite (~260x160) => ~520x320
+  PIE_W: 520,  // px
+  PIE_H: 320,  // px
+
+  // Hauteur unique pour tous les graphiques d'historique (lignes)
+  LINE_H: 320  // px
+};
+
+
 async function ensureXLSXLoaded() {
   if (window.XLSX) return;
   await new Promise((res, rej) => {
