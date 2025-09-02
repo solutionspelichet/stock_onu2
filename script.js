@@ -257,13 +257,14 @@ function setOptions(selectEl, options, keepValue=true) {
 }
 
 function rebuildMaterialSelectsInTable() {
-  document.querySelectorAll("select.b_mat, select.c_mat").forEach(sel=>{
+  document.querySelectorAll("select.b_mat, select.c_mat, select.vcinit_mat").forEach(sel=>{
     const old = sel.value;
     sel.innerHTML = `<option value="">— choisir —</option>` +
-      REF_MAT.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      (REF_MAT||[]).map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
     if (old && REF_MAT.includes(old)) sel.value = old;
   });
 }
+
 
 function refreshZoneDatalist() {
   const dl = document.getElementById("zone_options");
@@ -627,6 +628,152 @@ async function doSnapshot() {
   const t = await apiText({ action: "snapshotRestes", date: today });
   alert(t);
 }
+/* ===== Stock initial Voie Creuse — UI ===== */
+
+// Injecte le panneau dans l’onglet Avancé
+function injectVCInitialPanel() {
+  if (document.getElementById("vcinit_panel")) return;
+
+  // On place le bloc juste après l’état par zone (si présent), sinon à la fin de l’onglet avancé
+  const anchor = document.getElementById("a_vc_panel")
+             ||  document.getElementById("a_etat_table")
+             ||  document.getElementById("advanced");
+  if (!anchor) return;
+
+  const panel = document.createElement("div");
+  panel.id = "vcinit_panel";
+  panel.style.marginTop = "18px";
+  panel.innerHTML = `
+    <div class="step-block">
+      <div class="step-title">
+        <span class="step-badge">VC</span>
+        <span>Voie Creuse — Stock initial (one-shot)</span>
+      </div>
+      <div class="step-sub">
+        Enregistre ou corrige le <b>stock de départ</b> de Voie Creuse (Type = <i>Initial</i>, compté comme Entrée).
+        Utile pour éviter des soldes négatifs si tu as des Sorties sans ouverture.
+      </div>
+    </div>
+
+    <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <label>Date&nbsp;: <input id="vcinit_date" type="date" style="min-width:160px;"></label>
+      <button id="vcinit_add" class="secondary">+ Ajouter une ligne</button>
+      <button id="vcinit_save">Enregistrer comme “Initial”</button>
+    </div>
+
+    <div class="table-wrap scroll-x" style="margin-top:8px;">
+      <table id="vcinit_table">
+        <thead>
+          <tr>
+            <th style="min-width:240px;">Matériel</th>
+            <th style="min-width:120px;">Quantité</th>
+            <th>—</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="muted" style="margin-top:6px;">
+      Conseil&nbsp;: une seule ligne par matériel (les doublons seront <i>additionnés</i> à l’envoi).
+    </div>
+  `;
+  anchor.insertAdjacentElement("afterend", panel);
+
+  // Branche les actions
+  document.getElementById("vcinit_add").addEventListener("click", ()=> vcInit_addRow());
+  document.getElementById("vcinit_save").addEventListener("click", saveVCInitial);
+
+  // Date = aujourd’hui par défaut
+  const d = document.getElementById("vcinit_date");
+  if (d) setDateDefault(d, 0);
+
+  // Si REF_MAT est déjà chargé, remplir les selects ; sinon, loadReferentials le fera
+  rebuildVCInitSelects();
+}
+
+// Ajoute une ligne (Matériel, Quantité) au tableau
+function vcInit_addRow(matDefault="", qtyDefault="") {
+  const tbody = document.querySelector("#vcinit_table tbody");
+  const tr = document.createElement("tr");
+
+  // Matériel (select)
+  const tdMat = document.createElement("td");
+  const sel = document.createElement("select");
+  sel.className = "vcinit_mat";
+  sel.innerHTML = `<option value="">— choisir —</option>` +
+    (REF_MAT||[]).map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+  if (matDefault) sel.value = matDefault;
+  tdMat.appendChild(sel);
+
+  // Quantité (number + datalist)
+  const tdQty = document.createElement("td");
+  const qty = document.createElement("input");
+  qty.type = "number"; qty.min = "0"; qty.step = "1"; qty.value = qtyDefault || "";
+  qty.className = "vcinit_qty";
+  qty.setAttribute("list","qty_options"); // utilise ton datalist de quantités si présent
+  tdQty.appendChild(qty);
+
+  // Supprimer ligne
+  const tdDel = document.createElement("td");
+  const btn = document.createElement("button");
+  btn.textContent = "✕"; btn.className = "secondary";
+  btn.addEventListener("click", ()=> tr.remove());
+  tdDel.appendChild(btn);
+
+  tr.append(tdMat, tdQty, tdDel);
+  tbody.appendChild(tr);
+}
+
+// Met à jour les selects de cette section (appelé après loadReferentials)
+function rebuildVCInitSelects() {
+  document.querySelectorAll("select.vcinit_mat").forEach(sel=>{
+    const old = sel.value;
+    sel.innerHTML = `<option value="">— choisir —</option>` +
+      (REF_MAT||[]).map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    if (old && REF_MAT.includes(old)) sel.value = old;
+  });
+}
+
+// Récupère les lignes, agrège les doublons de matériel
+function vcInit_collectLinesAggregated() {
+  const rows = Array.from(document.querySelectorAll("#vcinit_table tbody tr"));
+  const map = new Map(); // mat -> somme
+  for (const tr of rows) {
+    const mat = tr.querySelector(".vcinit_mat")?.value || "";
+    const q   = parseInt(tr.querySelector(".vcinit_qty")?.value || "0", 10) || 0;
+    if (!mat || q <= 0) continue;
+    map.set(mat, (map.get(mat) || 0) + q);
+  }
+  // Transforme en [{materiel, quantite}]
+  return Array.from(map.entries()).map(([materiel, quantite]) => ({ materiel, quantite }));
+}
+
+// Envoie à l’API (action=vcSetInitial)
+async function saveVCInitial() {
+  const date = document.getElementById("vcinit_date")?.value;
+  if (!date) return alert("Indique la date du stock initial.");
+  const lignes = vcInit_collectLinesAggregated();
+  if (!lignes.length) return alert("Ajoute au moins une ligne (matériel + quantité > 0).");
+
+  try {
+    const msg = await apiText({
+      action: "vcSetInitial",
+      date,
+      lignes: JSON.stringify(lignes)
+    });
+    alert(msg);
+
+    // Reset table & afficher le stock live mis à jour si ton module est présent
+    const tbody = document.querySelector("#vcinit_table tbody");
+    if (tbody) tbody.innerHTML = "";
+    if (typeof loadVCLive === "function") {
+      await loadVCLive(); // recharge le tableau "Stock VC (live)" si tu l’utilises
+    }
+  } catch(e) {
+    alert("Erreur: " + e.message);
+  }
+}
 
 /***********************
  *  Boot
@@ -635,7 +782,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
   addStepHeaders();                 // Étapes 1/2/3 visibles
   ensureDatalists();
-  injectVCLivePanel();
+  injectVCLivePanel?.();     // si tu utilises déjà le panel "Stock VC (live)"
+  injectVCInitialPanel();
   // Dates par défaut
   setDateDefault(document.getElementById("b_j1"), 1);
   setDateDefault(document.getElementById("r_jour"), 0);
