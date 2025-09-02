@@ -99,6 +99,31 @@
 
     <!-- =============== DASHBOARD =============== -->
     <section id="tab-dashboard" class="tab-panel hidden">
+      <!-- Graphique Stock VC (Top 10) -->
+<div class="card">
+  <h3>Stock Voie Creuse — Top 10</h3>
+  <canvas id="chartVC" height="140"></canvas>
+</div>
+
+<!-- Graphiques Besoins J+1 -->
+<div class="grid-2">
+  <div class="card">
+    <h3>Besoins J+1 — par équipe</h3>
+    <canvas id="chartBesoinsTeam" height="160"></canvas>
+  </div>
+  <div class="card">
+    <h3>Besoins J+1 — par matériel</h3>
+    <canvas id="chartBesoinsMat" height="160"></canvas>
+  </div>
+</div>
+
+<!-- Historique d’usage -->
+<div class="card">
+  <h3>Usage quotidien — par équipe</h3>
+  <canvas id="chartUsageTeams" height="180"></canvas>
+</div>
+
+      
       <div class="card">
         <h2>Dashboard — Synthèse</h2>
         <div class="grid grid-4 grid-sm-2 grid-xs-1">
