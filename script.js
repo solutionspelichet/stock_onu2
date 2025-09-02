@@ -608,8 +608,8 @@ async function loadDashboard() {
 
     const wrapVC = ensureDiv("chartVCPieWrap");
     wipe(wrapVC);
-    wrapVC.innerHTML = `<div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <div>
+    wrapVC.innerHTML = `<div class="card" style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;"> ... </div>`;
+
           <h3 style="margin:4px 0;">Stock Voie Creuse — répartition</h3>
           <div class="muted">Total: <b>${vc.total||0}</b></div>
         </div>
