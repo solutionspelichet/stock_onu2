@@ -10,6 +10,74 @@ const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwO0P3Yo5kw9PPriJP
 /***********************
  *  Helpers
  ***********************/
+/* ====== DASH Containers (robuste) ====== */
+function getDashParent() {
+  return document.getElementById("dashboard")
+      || document.getElementById("tab-dashboard")
+      || document.getElementById("panel-dashboard")
+      || document.querySelector("#dashRoot, .dashboard, #app, main, body");
+}
+function ensureDiv(id, parent) {
+  let el = document.getElementById(id);
+  if (!el) {
+    const p = parent || getDashParent() || document.body;
+    el = document.createElement("div");
+    el.id = id;
+    p.appendChild(el);
+  }
+  return el;
+}
+function wipe(el){ if(el) el.innerHTML=""; }
+
+/* ====== Chart helpers (small pies + multi-lines) ====== */
+const __charts = {};
+function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
+function makeColors(n){ const arr=[]; for(let i=0;i<n;i++) arr.push(`hsl(${Math.round((360*i)/Math.max(1,n))} 70% 55%)`); return arr; }
+
+function renderPieChart(canvasId, labels, values, title){
+  destroyChart(canvasId);
+  const el=document.getElementById(canvasId);
+  if(!el) return;
+  // Taille réduite
+  el.style.maxWidth = "260px";
+  el.style.height   = "160px";
+  const colors=makeColors(values.length);
+  __charts[canvasId]=new Chart(el.getContext('2d'),{
+    type:'pie',
+    data:{ labels, datasets:[{ data: values, backgroundColor: colors }] },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{ title:{ display:!!title, text:title, font:{ size:12 } }, legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 } } } }
+    }
+  });
+}
+
+function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
+  destroyChart(canvasId);
+  const el=document.getElementById(canvasId);
+  if(!el) return;
+  // Taille raisonnable
+  el.style.width  = "100%";
+  el.style.height = "220px";
+  const mats=Object.keys(seriesByMat);
+  const colors=makeColors(mats.length);
+  const datasets=mats.map((m,i)=>({ label:m, data:seriesByMat[m], fill:false, tension:0.2, borderColor:colors[i], pointRadius:2 }));
+  __charts[canvasId]=new Chart(el.getContext('2d'),{
+    type:'line',
+    data:{ labels: dates, datasets },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{ title:{ display:!!title, text:title, font:{ size:12 } }, legend:{ position:'bottom', labels:{ font:{ size:10 } } } },
+      interaction:{ mode:'index', intersect:false },
+      scales:{ x:{ ticks:{ autoSkip:true, maxTicksLimit:12, font:{ size:10 } } }, y:{ ticks:{ font:{ size:10 } } } }
+    }
+  });
+}
+
+
+
 function escapeHtml(x) {
   return String(x ?? "")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -646,88 +714,95 @@ async function loadDashboard() {
   try {
     await ensureChartJSLoaded();
 
-    /* =======================
-     * 1) STOCK VC (live) — camembert
-     * ======================= */
+    /* ========== 1) STOCK VC (live) — camembert réduit ========== */
     const vc = await apiGet({ stock: "vc" }); // {headers, rows, total}
-    // Tableau existant (si tu l’utilises) :
     renderBlock("dashStockVC", { headers: vc.headers || ["Matériel","Quantité"], rows: vc.rows || [] });
 
-    // Camembert
     const wrapVC = ensureDiv("chartVCPieWrap");
     wipe(wrapVC);
-    const c1 = document.createElement("canvas");
-    c1.id = "chartVCPie"; c1.height = 160;
-    wrapVC.innerHTML = `<div class="card"><h3>Stock Voie Creuse — répartition</h3></div>`;
-    wrapVC.querySelector(".card").appendChild(c1);
+    wrapVC.innerHTML = `<div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:4px 0;">Stock Voie Creuse — répartition</h3>
+          <div class="muted">Total: <b>${vc.total||0}</b></div>
+        </div>
+        <canvas id="chartVCPie"></canvas>
+      </div>`;
     const labelsVC = (vc.rows||[]).map(r=>r[0]);
     const valuesVC = (vc.rows||[]).map(r=>+r[1]);
-    renderPieChart("chartVCPie", labelsVC, valuesVC, "Répartition par matériel");
-    // total
-    const totalDiv = document.createElement("div");
-    totalDiv.className="muted"; totalDiv.style.marginTop="6px"; totalDiv.textContent = `Total: ${vc.total||0}`;
-    wrapVC.querySelector(".card").appendChild(totalDiv);
+    renderPieChart("chartVCPie", labelsVC, valuesVC, "");
 
-    /* =======================
-     * 2) BESOINS J+1 — un camembert par équipe
-     * ======================= */
-    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {rowsEquipe, matrix, pivot...}
-    // Matrice en tableau (optionnel, garde si tu veux) :
-    renderBlock("dashBesoinsEqJ1", bes.matrix);
+    /* ========== 2) BESOINS J+1 — un camembert/équipe (réduit) ========== */
+    const bes = await apiGet({ besoins: "parEquipe", date: J1 }); // {rowsEquipe, matrix,...}
+    renderBlock("dashBesoinsEqJ1", bes.matrix); // tableau matrice (optionnel)
 
     const wrapBes = ensureDiv("chartBesoinsPerTeamWrap");
     wipe(wrapBes);
-    wrapBes.innerHTML = `<h3>Besoins J+1 — répartition par équipe</h3>`;
-    // Regrouper rowsEquipe: [Equipe, Matériel, Cible]
-    const group = new Map();
-    (bes.rowsEquipe||[]).forEach(row=>{
-      const eq=row[0], mat=row[1], q=+row[2]||0;
+    wrapBes.innerHTML = `<h3 style="margin:6px 0 8px;">Besoins J+1 — répartition par équipe</h3>
+                         <div id="besTeamGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;"></div>`;
+    const grid = document.getElementById("besTeamGrid");
+
+    const group = new Map(); // eq -> Map(mat->q)
+    (bes.rowsEquipe||[]).forEach(([eq, mat, q])=>{
       if(!group.has(eq)) group.set(eq, new Map());
-      group.get(eq).set(mat, (group.get(eq).get(mat)||0)+q);
-    });
-    // Créer une carte + camembert par équipe
-    Array.from(group.keys()).sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base',numeric:true})).forEach(eq=>{
-      const card = document.createElement("div");
-      card.className = "card"; card.style.marginTop="12px";
-      const canvasId = `chartBesTeam_${slugify(eq)}`;
-      card.innerHTML = `<h4>${escapeHtml(eq)}</h4><canvas id="${canvasId}" height="160"></canvas>`;
-      wrapBes.appendChild(card);
-      const mats = Array.from(group.get(eq).keys());
-      const vals = mats.map(m=>group.get(eq).get(m));
-      renderPieChart(canvasId, mats, vals, `Répartition des matériels pour ${eq}`);
+      const cur = group.get(eq).get(mat)||0;
+      group.get(eq).set(mat, cur + (+q||0));
     });
 
-    /* =======================
-     * 3) HISTORIQUE D’USAGE — un graph/équipe, 1 courbe par matériel
-     * ======================= */
+    Array.from(group.keys()).sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base',numeric:true})).forEach(eq=>{
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.padding = "10px";
+      const canvasId = `chartBesTeam_${slugify(eq)}`;
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;min-width:120px;">
+            <h4 style="margin:4px 0;">${escapeHtml(eq)}</h4>
+          </div>
+          <canvas id="${canvasId}"></canvas>
+        </div>`;
+      grid.appendChild(card);
+
+      const mats = Array.from(group.get(eq).keys());
+      const vals = mats.map(m=>group.get(eq).get(m));
+      renderPieChart(canvasId, mats, vals, "");
+    });
+
+    /* ========== 3) HISTORIQUE — 1 graphe par équipe, 1 courbe par matériel ========== */
     const usage = await apiGet({ usage: "series", from: F, to: T }); // { dates, teams, matrix, raw }
     const wrapUsage = ensureDiv("chartUsagePerTeamWrap");
     wipe(wrapUsage);
-    wrapUsage.innerHTML = `<h3>Usage quotidien — par équipe (1 courbe par matériel)</h3>`;
+    wrapUsage.innerHTML = `<h3 style="margin:6px 0 8px;">Usage quotidien — par équipe</h3>`;
 
-    // On pivote depuis usage.raw: [date, équipe, matériel, qty]
     const dates = usage.dates || [];
-    const raw   = usage.raw   || [];
-    // par équipe -> par matériel -> série par date
-    const byTeam = new Map();
+    const raw   = usage.raw   || []; // [date, eq, mat, qty]
+    const byTeam = new Map();        // eq -> Map(mat -> series[dates])
+
     raw.forEach(([d, eq, mat, q])=>{
-      if(!byTeam.has(eq)) byTeam.set(eq, new Map());
-      if(!byTeam.get(eq).has(mat)) byTeam.get(eq).set(mat, Array(dates.length).fill(0));
+      if (!byTeam.has(eq)) byTeam.set(eq, new Map());
+      const m = byTeam.get(eq);
+      if (!m.has(mat)) m.set(mat, Array(dates.length).fill(0));
       const di = dates.indexOf(d);
-      if (di>=0) byTeam.get(eq).get(mat)[di] += (+q||0);
+      if (di>=0) m.get(mat)[di] += (+q||0);
     });
+
+    // Grille responsive pour les graphes d’usage
+    const gridU = document.createElement("div");
+    gridU.style.display = "grid";
+    gridU.style.gridTemplateColumns = "repeat(auto-fill, minmax(340px, 1fr))";
+    gridU.style.gap = "12px";
+    wrapUsage.appendChild(gridU);
 
     Array.from(byTeam.keys()).sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base',numeric:true})).forEach(eq=>{
       const card = document.createElement("div");
-      card.className = "card"; card.style.marginTop="12px";
+      card.className = "card";
+      card.style.padding = "10px";
       const canvasId = `chartUsage_${slugify(eq)}`;
-      card.innerHTML = `<h4>${escapeHtml(eq)}</h4><canvas id="${canvasId}" height="200"></canvas>`;
-      wrapUsage.appendChild(card);
+      card.innerHTML = `<h4 style="margin:4px 0 8px;">${escapeHtml(eq)}</h4><canvas id="${canvasId}"></canvas>`;
+      gridU.appendChild(card);
 
-      // séries par matériel pour cette équipe
       const seriesByMat = {};
       byTeam.get(eq).forEach((arr, mat)=>{ seriesByMat[mat]=arr; });
-      renderLinesByMaterial(canvasId, dates, seriesByMat, `Usage ${eq} (${F} → ${T})`);
+      renderLinesByMaterial(canvasId, dates, seriesByMat, "");
     });
 
     msg.textContent = `J=${J} • J+1=${J1} • Usage: ${F}→${T}`;
@@ -738,6 +813,7 @@ async function loadDashboard() {
     msg.className = "error";
   }
 }
+
 
 
 async function exportDashboardXLSX() {
