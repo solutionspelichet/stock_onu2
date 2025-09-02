@@ -67,7 +67,7 @@ function toTable(headers, rows) {
   const tbody = `<tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
 }
-const __charts = {};
+
 function destroyChart(id){ if(__charts[id]){ __charts[id].destroy(); delete __charts[id]; } }
 
 function renderBarChart(canvasId, labels, values, title){
