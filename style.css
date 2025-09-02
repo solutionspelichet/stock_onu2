@@ -105,3 +105,16 @@ thead th {position:sticky; top:0; background:color-mix(in oklab, var(--panel-2) 
   .tab-button{padding:8px 12px}
   .app-header{padding:8px 12px}
 }
+(function injectChartFrameCSS(){
+  if (document.getElementById("chart-frame-css")) return;
+  const s = document.createElement("style");
+  s.id = "chart-frame-css";
+  s.textContent = `
+    /* Empêche tout CSS global de comprimer les canvases */
+    .card canvas { display:block !important; }
+    .card { overflow: visible; }
+    /* Si ton thème a une hauteur fixe, on la neutralise */
+    .card[style*="min-height"] { height:auto !important; }
+  `;
+  document.head.appendChild(s);
+})();
