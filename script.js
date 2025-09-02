@@ -75,9 +75,18 @@ function renderPieChart(canvasId, labels, values, title){
   if(!el) return;
 
   // Taille uniforme pour tous les camemberts
-  el.style.width  = `${DASH_SIZES.PIE_W}px`;
+  el.style.width    = `${DASH_SIZES.PIE_W}px`;
   el.style.maxWidth = `${DASH_SIZES.PIE_W}px`;
-  el.style.height = `${DASH_SIZES.PIE_H}px`;
+  el.style.height   = `${DASH_SIZES.PIE_H}px`;
+  el.style.display  = "block";
+
+  // S'assure que le cadre (card) a la bonne hauteur
+  const card = el.closest(".card");
+  if (card) {
+    card.style.minHeight   = (DASH_SIZES.PIE_H + 56) + "px"; // marge pour le titre/legend
+    card.style.alignItems  = "stretch";
+    card.style.overflow    = "visible";
+  }
 
   const colors=makeColors(values.length);
   __charts[canvasId]=new Chart(el.getContext('2d'),{
@@ -93,14 +102,24 @@ function renderPieChart(canvasId, labels, values, title){
     }
   });
 }
+
 function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
   destroyChart(canvasId);
   const el=document.getElementById(canvasId);
   if(!el) return;
 
-  // Hauteur identique pour tous les historiques
-  el.style.width  = "100%";
-  el.style.height = `${DASH_SIZES.LINE_H}px`;
+  // Hauteur uniforme pour tous les historiques
+  el.style.width    = "100%";
+  el.style.height   = `${DASH_SIZES.LINE_H}px`;
+  el.style.display  = "block";
+
+  // S'assure que le cadre (card) a la bonne hauteur
+  const card = el.closest(".card");
+  if (card) {
+    card.style.minHeight   = (DASH_SIZES.LINE_H + 56) + "px"; // marge pour titre/legend
+    card.style.alignItems  = "stretch";
+    card.style.overflow    = "visible";
+  }
 
   const mats=Object.keys(seriesByMat);
   const colors=makeColors(mats.length);
@@ -126,6 +145,7 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
     }
   });
 }
+
 
 /***********************
  *  Rendu tables & XLSX
