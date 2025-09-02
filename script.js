@@ -293,6 +293,7 @@ async function loadReferentials() {
   setOptions(document.getElementById("b_equipe"), REF_EQ);
   setOptions(document.getElementById("c_equipe"), REF_EQ);
   rebuildMaterialSelectsInTable();
+  rebuildVCInitSelects()
   refreshZoneDatalist();
 
   console.log("Référentiels chargés:", { equipes: REF_EQ.length, materiels: REF_MAT.length });
