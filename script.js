@@ -81,6 +81,25 @@ function ensureDiv(id, parent) {
 }
 function wipe(el){ if(el) el.innerHTML=""; }
 
+function downloadBlob(data, filename, mime='text/csv;charset=utf-8') {
+  const blob = new Blob([data], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+}
+
+function aoaToCSV(aoa) {
+  return (aoa || []).map(row =>
+    row.map(v => {
+      const s = (v==null ? '' : String(v)).replace(/"/g,'""');
+      return /[",\n;]/.test(s) ? `"${s}"` : s;
+    }).join(',')
+  ).join('\n');
+}
+
+
 /***********************
  *  Chart.js helpers
  ***********************/
@@ -801,36 +820,53 @@ async function exportAvanceXLSX() {
 }
 
 async function exportDashboardXLSX() {
-  await ensureXLSXLoaded();
-
   const J  = document.getElementById("dashJ").value;
   const J1 = document.getElementById("dashJ1").value;
   const F  = document.getElementById("dashFrom").value;
   const T  = document.getElementById("dashTo").value;
 
-  const r = await apiGetDashboard(J, J1, F, T); // récupère toutes les sections
-  const wb = XLSX.utils.book_new();
+  const r = await apiGetDashboard(J, J1, F, T);
 
-  const add = (name, blk) => {
-    if (!blk) return;
-    const data = [ (blk.headers||[]), ...(blk.rows||[]) ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
-  };
-
-  add("Stock_VC", r.stockVC);
-  add("EntreesBib_J", r.entreesBiblioJour);
-  add("EntreesBib_J+1_plan", r.entreesBiblioJplus1_plan);
-  add("EntreesBib_J+1_reel", r.entreesBiblioJplus1_reelles);
-  add("Repartition_J", r.repartJourEquipes);
-  add("Besoins_J+1", r.besoinsJplus1Equipes);
-  add("Usage", r.usagePivot);
-
-  const fname = `dashboard_${J||"J"}.xlsx`;
-  await downloadXlsxFile(wb, fname);
+  try {
+    await ensureXLSXLoaded(); // essaie XLSX
+    const wb = XLSX.utils.book_new();
+    const add = (name, blk)=>{
+      if (!blk) return;
+      const data = [ (blk.headers||[]), ...(blk.rows||[]) ];
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+    };
+    add("Stock_VC", r.stockVC);
+    add("EntreesBib_J", r.entreesBiblioJour);
+    add("EntreesBib_J+1_plan", r.entreesBiblioJplus1_plan);
+    add("EntreesBib_J+1_reel", r.entreesBiblioJplus1_reelles);
+    add("Repartition_J", r.repartJourEquipes);
+    add("Besoins_J+1", r.besoinsJplus1Equipes);
+    add("Usage", r.usagePivot);
+    const fname = `dashboard_${J||"J"}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  } catch (e) {
+    console.warn('XLSX indisponible, fallback CSV:', e.message);
+    // Fallback : on assemble un CSV multi-sections
+    const blocks = [
+      ['Stock_VC', r.stockVC],
+      ['EntreesBib_J', r.entreesBiblioJour],
+      ['EntreesBib_J+1_plan', r.entreesBiblioJplus1_plan],
+      ['EntreesBib_J+1_reel', r.entreesBiblioJplus1_reelles],
+      ['Repartition_J', r.repartJourEquipes],
+      ['Besoins_J+1', r.besoinsJplus1Equipes],
+      ['Usage', r.usagePivot]
+    ];
+    let csv = '';
+    blocks.forEach(([name, blk]) => {
+      if (!blk) return;
+      const aoa = [ (blk.headers||[]), ...(blk.rows||[]) ];
+      csv += `### ${name}\n` + aoaToCSV(aoa) + '\n\n';
+    });
+    downloadBlob(csv, `dashboard_${J||'J'}.csv`);
+    alert("Librairie XLSX non chargée : export CSV réalisé à la place.");
+  }
 }
-
-
 /***********************
  *  Avancé
  ***********************/
@@ -850,18 +886,35 @@ async function loadEtatParZone() {
 }
 async function ensureXLSXLoadedAvance(){ return ensureXLSXLoaded(); }
 async function exportAvanceXLSX() {
-  await ensureXLSXLoadedAvance();
-  const wb = XLSX.utils.book_new();
-  const host = document.getElementById("a_etat_table");
-  if (host && host.querySelector("table")) {
-    const headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
-    const rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
-      Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
-    );
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Etat_par_zone");
+  try {
+    await ensureXLSXLoaded();
+    const wb = XLSX.utils.book_new();
+    const host = document.getElementById("a_etat_table");
+    if (host && host.querySelector("table")) {
+      const headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
+      const rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
+        Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
+      );
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Etat_par_zone");
+    }
+    XLSX.writeFile(wb, "avance_export.xlsx");
+  } catch (e) {
+    console.warn('XLSX indisponible, fallback CSV:', e.message);
+    const host = document.getElementById("a_etat_table");
+    if (host && host.querySelector("table")) {
+      const headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
+      const rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
+        Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
+      );
+      const csv = aoaToCSV([headers, ...rows]);
+      downloadBlob(csv, 'avance_export.csv');
+      alert("Librairie XLSX non chargée : export CSV réalisé à la place.");
+    } else {
+      alert("Aucune donnée à exporter.");
+    }
   }
-  XLSX.writeFile(wb, "avance_export.xlsx");
 }
+
 async function toggleSnapshotLock(ev) {
   const on = ev.target.checked ? "1" : "0";
   const t = await apiText({ action: "setSnapshotLock", on });
@@ -886,11 +939,8 @@ async function loadVCLive(filterMat) {
   host.innerHTML = tableHtml + `<div class="muted" style="margin-top:6px;">Total: <b>${(r && r.total) || 0}</b></div>`;
 }
 async function exportVCLiveXLSX() {
-  await ensureXLSXLoaded();
-
   const host = document.getElementById("a_vc_table");
   let headers = ["Matériel","Quantité"], rows = [];
-
   if (host && host.querySelector("table")) {
     headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
     rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
@@ -902,13 +952,21 @@ async function exportVCLiveXLSX() {
     rows = r.rows || rows;
   }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  XLSX.utils.book_append_sheet(wb, ws, "Stock_VC_live");
-  const today = new Date().toISOString().slice(0,10);
-
-  await downloadXlsxFile(wb, `stock_vc_live_${today}.xlsx`);
+  try {
+    await ensureXLSXLoaded();
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Stock_VC_live");
+    const today = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `stock_vc_live_${today}.xlsx`);
+  } catch (e) {
+    console.warn('XLSX indisponible, fallback CSV:', e.message);
+    const csv = aoaToCSV([headers, ...rows]);
+    const today = new Date().toISOString().slice(0,10);
+    downloadBlob(csv, `stock_vc_live_${today}.csv`);
+    alert("Librairie XLSX non chargée : export CSV réalisé à la place.");
+  }
 }
+
 
 function injectVCLivePanel() {
   if (document.getElementById("a_vc_panel")) return;
