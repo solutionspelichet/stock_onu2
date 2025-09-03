@@ -40,6 +40,17 @@ function slugify(s){
   `;
   document.head.appendChild(s);
 })();
+(function injectChartCSS(){
+  if (document.getElementById('chart-css')) return;
+  const s = document.createElement('style');
+  s.id = 'chart-css';
+  s.textContent = `
+    .chart-wrap{ position:relative; width:100%; }
+    .chart-wrap > canvas{ width:100% !important; height:100% !important; display:block; }
+    .card{ overflow: visible; }
+  `;
+  document.head.appendChild(s);
+})();
 
 /* ====== Conteneurs Dashboard ====== */
 function getDashParent() {
@@ -84,27 +95,13 @@ function renderPieChart(canvasId, labels, values, title){
   const el=document.getElementById(canvasId);
   if(!el) return;
 
-  // Taille uniforme pour tous les camemberts
-  el.style.width    = `${DASH_SIZES.PIE_W}px`;
-  el.style.maxWidth = `${DASH_SIZES.PIE_W}px`;
-  el.style.height   = `${DASH_SIZES.PIE_H}px`;
-  el.style.display  = "block";
-
-  // S'assure que le cadre (card) a la bonne hauteur
-  const card = el.closest(".card");
-  if (card) {
-    card.style.minHeight   = (DASH_SIZES.PIE_H + 56) + "px"; // marge pour le titre/legend
-    card.style.alignItems  = "stretch";
-    card.style.overflow    = "visible";
-  }
-
   const colors=makeColors(values.length);
   __charts[canvasId]=new Chart(el.getContext('2d'),{
     type:'pie',
     data:{ labels, datasets:[{ data: values, backgroundColor: colors }] },
     options:{
       responsive:true,
-      maintainAspectRatio:false,
+      maintainAspectRatio:false, // le canvas remplit la .chart-wrap
       plugins:{
         title:{ display:!!title, text:title, font:{ size:12 } },
         legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 } } }
@@ -118,31 +115,19 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
   const el=document.getElementById(canvasId);
   if(!el) return;
 
-  // Hauteur uniforme pour tous les historiques
-  el.style.width    = "100%";
-  el.style.height   = `${DASH_SIZES.LINE_H}px`;
-  el.style.display  = "block";
-
-  // S'assure que le cadre (card) a la bonne hauteur
-  const card = el.closest(".card");
-  if (card) {
-    card.style.minHeight   = (DASH_SIZES.LINE_H + 56) + "px"; // marge pour titre/legend
-    card.style.alignItems  = "stretch";
-    card.style.overflow    = "visible";
-  }
-
   const mats=Object.keys(seriesByMat);
   const colors=makeColors(mats.length);
   const datasets=mats.map((m,i)=>({
     label:m, data:seriesByMat[m], fill:false, tension:0.2,
     borderColor:colors[i], pointRadius:2
   }));
+
   __charts[canvasId]=new Chart(el.getContext('2d'),{
     type:'line',
     data:{ labels: dates, datasets },
     options:{
       responsive:true,
-      maintainAspectRatio:false,
+      maintainAspectRatio:false, // remplit la .chart-wrap (hauteur fixe)
       plugins:{
         title:{ display:!!title, text:title, font:{ size:12 } },
         legend:{ position:'bottom', labels:{ font:{ size:10 } } }
@@ -155,6 +140,7 @@ function renderLinesByMaterial(canvasId, dates, seriesByMat, title){
     }
   });
 }
+
 
 
 /***********************
@@ -624,8 +610,11 @@ async function loadDashboard() {
       <h3 style="margin:4px 0;">Stock Voie Creuse — répartition</h3>
       <div class="muted">Total: <b>${vc.total||0}</b></div>
     </div>
-    <canvas id="chartVCPie"></canvas>
+    <div class="chart-wrap" style="width:${DASH_SIZES.PIE_W}px;height:${DASH_SIZES.PIE_H}px;">
+      <canvas id="chartVCPie"></canvas>
+    </div>
   </div>`;
+
     const labelsVC = (vc.rows||[]).map(r=>r[0]);
     const valuesVC = (vc.rows||[]).map(r=>+r[1]);
     renderPieChart("chartVCPie", labelsVC, valuesVC, "");
@@ -655,12 +644,15 @@ async function loadDashboard() {
       card.style.padding = "10px";
       const canvasId = `chartBesTeam_${slugify(eq)}`;
       card.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="flex:1;min-width:120px;">
-            <h4 style="margin:4px 0;">${escapeHtml(eq)}</h4>
-          </div>
-          <canvas id="${canvasId}"></canvas>
-        </div>`;
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div style="flex:1;min-width:120px;">
+      <h4 style="margin:4px 0;">${escapeHtml(eq)}</h4>
+    </div>
+    <div class="chart-wrap" style="width:${DASH_SIZES.PIE_W}px;height:${DASH_SIZES.PIE_H}px;">
+      <canvas id="${canvasId}"></canvas>
+    </div>
+  </div>`;
+
       grid.appendChild(card);
 
       const mats = Array.from(group.get(eq).keys());
@@ -697,7 +689,12 @@ async function loadDashboard() {
       card.className = "card";
       card.style.padding = "10px";
       const canvasId = `chartUsage_${slugify(eq)}`;
-      card.innerHTML = `<h4 style="margin:4px 0 8px;">${escapeHtml(eq)}</h4><canvas id="${canvasId}"></canvas>`;
+      card.innerHTML = `
+  <h4 style="margin:4px 0 8px;">${escapeHtml(eq)}</h4>
+  <div class="chart-wrap" style="height:${DASH_SIZES.LINE_H}px;">
+    <canvas id="${canvasId}"></canvas>
+  </div>`;
+
       gridU.appendChild(card);
 
       const seriesByMat = {};
