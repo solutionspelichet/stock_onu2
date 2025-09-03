@@ -30,7 +30,7 @@ function slugify(s){
     .replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"")
     .toLowerCase();
 }
-function injectChartFrameCSS(){
+(function injectChartFrameCSS(){
   if (document.getElementById("chart-frame-css")) return;
   const s = document.createElement("style");
   s.id = "chart-frame-css";
@@ -39,7 +39,7 @@ function injectChartFrameCSS(){
     .card { overflow: visible; }
   `;
   document.head.appendChild(s);
-}();
+})();
 
 /* ====== Conteneurs Dashboard ====== */
 function getDashParent() {
