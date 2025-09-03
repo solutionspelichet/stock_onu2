@@ -933,7 +933,7 @@ async function exportDashboardXLSX() {
   XLSX.utils.book_append_sheet(wb, ws2, "Entrées J+1 (plan)");
   XLSX.utils.book_append_sheet(wb, ws3, "Besoins J+1 (éq×mat)");
   XLSX.utils.book_append_sheet(wb, ws4, "Usage depuis 15-08-2025");
-  XLSX.utils.book_append_sheet(wb, ws5, "Usage détail (jour/eq/mat)");
+  XLSX.utils.book_append_sheet(wb, ws5, "Usage détail (jour-eq-mat)");
 
   const fname = `dashboard_${J || now}.xlsx`;
   // Si tu as déjà la fonction downloadXlsxFile, profite du plan B/plan C
