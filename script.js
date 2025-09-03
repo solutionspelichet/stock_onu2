@@ -774,6 +774,35 @@ async function exportAvanceXLSX() {
   await downloadXlsxFile(wb, "avance_export.xlsx");
 }
 
+async function exportDashboardXLSX() {
+  await ensureXLSXLoaded();
+
+  const J  = document.getElementById("dashJ").value;
+  const J1 = document.getElementById("dashJ1").value;
+  const F  = document.getElementById("dashFrom").value;
+  const T  = document.getElementById("dashTo").value;
+
+  const r = await apiGetDashboard(J, J1, F, T); // récupère toutes les sections
+  const wb = XLSX.utils.book_new();
+
+  const add = (name, blk) => {
+    if (!blk) return;
+    const data = [ (blk.headers||[]), ...(blk.rows||[]) ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+  };
+
+  add("Stock_VC", r.stockVC);
+  add("EntreesBib_J", r.entreesBiblioJour);
+  add("EntreesBib_J+1_plan", r.entreesBiblioJplus1_plan);
+  add("EntreesBib_J+1_reel", r.entreesBiblioJplus1_reelles);
+  add("Repartition_J", r.repartJourEquipes);
+  add("Besoins_J+1", r.besoinsJplus1Equipes);
+  add("Usage", r.usagePivot);
+
+  const fname = `dashboard_${J||"J"}.xlsx`;
+  await downloadXlsxFile(wb, fname);
+}
 
 
 /***********************
