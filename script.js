@@ -981,6 +981,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   ensureDatalists();
   injectVCLivePanel?.();
   injectVCInitialPanel();
+  preloadXLSX();  // lance le chargement de XLSX en avance
+
 
   // Dates par défaut (Réappro)
   setDateDefault(document.getElementById("b_j1"), 1);
