@@ -162,6 +162,12 @@ async function ensureXLSXLoaded() {
   });
 }
 
+// Préchargement pour éviter la perte du “gesture” utilisateur (iOS/Safari)
+async function preloadXLSX() {
+  try { await ensureXLSXLoaded(); } catch(_) {}
+}
+
+
 /***********************
  *  API helpers
  ***********************/
