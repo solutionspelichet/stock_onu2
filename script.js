@@ -822,7 +822,7 @@ async function exportAvanceXLSX() {
 }
 
 async function exportDashboardXLSX() {
-  // Assure-toi que la lib XLSX est chargée (local/CDN via ensureXLSXLoaded)
+  // 1) S'assurer que XLSX est dispo
   try {
     await ensureXLSXLoaded();
   } catch (e) {
@@ -830,19 +830,21 @@ async function exportDashboardXLSX() {
     return;
   }
 
-  const J   = document.getElementById("dashJ").value;   // jour du dashboard
-  const J1  = document.getElementById("dashJ1").value;  // J+1 sélectionné
-  const now = new Date().toISOString().slice(0,10);     // aujourd’hui (AAAA-MM-JJ)
+  // 2) Paramètres / périodes
+  const USAGE_START = "2025-08-15"; // ← tu peux adapter
+  const J   = document.getElementById("dashJ").value;
+  const J1  = document.getElementById("dashJ1").value;
+  const now = new Date().toISOString().slice(0,10);
 
-  // Récupère en parallèle tout ce dont on a besoin
+  // 3) Récupération des données nécessaires
   const [vc, plan, besEq, usageSeries] = await Promise.all([
-    apiGet({ stock: "vc" }),                          // 1) Stock VC live (du jour)
-    apiGet({ plan: "reappro", date: J1 }),            // 2) Plan J+1 (agrégat)
-    apiGet({ besoins: "parEquipe", date: J1 }),       // 3) Besoins J+1 (équipe + matériel)
-    apiGet({ usage: "series", from: USAGE_START, to: now }) // 4&5) Usage séries (raw)
+    apiGet({ stock: "vc" }),                          // Stock VC du jour (live)
+    apiGet({ plan: "reappro", date: J1 }),            // Plan J+1 (agregat + details)
+    apiGet({ besoins: "parEquipe", date: J1 }),       // (on le garde si tu veux comparer plus tard)
+    apiGet({ usage: "series", from: USAGE_START, to: now }) // Usage séries
   ]);
 
-  // Helper: autosize colonnes
+  // Helper autosize colonnes
   const autoCols = (aoa) =>
     aoa[0].map((_, i) => ({
       wch: Math.max(
@@ -851,7 +853,7 @@ async function exportDashboardXLSX() {
       )
     }));
 
-  // === 1) FEUILLE "Stock VC du jour" ===
+  // === Feuille 1 : Stock VC du jour ===
   const vcRows = (vc.rows || []).map(r => [r[0], Number(r[1]) || 0]);
   const sheet1 = [
     ["Date", J || now],
@@ -860,7 +862,7 @@ async function exportDashboardXLSX() {
     ...vcRows
   ];
 
-  // === 2) FEUILLE "Entrées biblio J+1 (plan)" ===
+  // === Feuille 2 : Entrées Biblio J+1 (plan agrégé) ===
   const agg = (plan.agregat || []).map(a => [a[1], Number(a[2]) || 0]); // [Matériel, Quantité]
   const sheet2 = [
     ["J+1", J1 || ""],
@@ -869,25 +871,36 @@ async function exportDashboardXLSX() {
     ...agg
   ];
 
-  // === 3) FEUILLE "Besoins J+1 par équipe et matériel" ===
-  // On attend besEq.rowsEquipe: [Equipe, Matériel, Cible]
-  const eqMatRows = (besEq.rowsEquipe || []).map(r => [r[0], r[1], Number(r[2]) || 0]);
-  // Tri lisible
-  eqMatRows.sort((a,b)=>{
-    const c1 = a[0].localeCompare(b[0], 'fr', {sensitivity:'base', numeric:true});
-    if (c1) return c1;
-    return a[1].localeCompare(b[1], 'fr', {sensitivity:'base', numeric:true});
+  // === Feuille 3 : Besoins J+1 NETS (à transférer) par équipe & matériel ===
+  // plan.details = [#, Équipe, Zone, Matériel, Reste, Cible, BesoinNet]
+  const sumEqMat = new Map(); // "eq||mat" -> qty
+  (plan.details || []).forEach(r => {
+    const eq  = r[1];
+    const mat = r[3];
+    const besoinNet = Number(r[6]) || 0;
+    if (!eq || !mat || besoinNet <= 0) return;
+    const key = (eq + "||" + mat).toLowerCase();
+    sumEqMat.set(key, (sumEqMat.get(key) || 0) + besoinNet);
   });
+  const sheet3Rows = Array.from(sumEqMat.entries())
+    .map(([key, qty]) => {
+      const [eq, mat] = key.split("||");
+      return [eq, mat, qty];
+    })
+    .sort((a,b)=>{
+      const c1 = a[0].localeCompare(b[0], 'fr', {sensitivity:'base', numeric:true}); // équipe
+      if (c1) return c1;
+      return a[1].localeCompare(b[1], 'fr', {sensitivity:'base', numeric:true});     // matériel
+    });
   const sheet3 = [
     ["J+1", J1 || ""],
     [],
-    ["Équipe", "Matériel", "Cible"],
-    ...eqMatRows
+    ["Équipe", "Matériel", "Besoin net à transférer"],
+    ...sheet3Rows
   ];
 
-  // === 4) FEUILLE "Usage total depuis 15/08/2025 par matériel" ===
-  // usageSeries.raw: [date, equipe, materiel, qty]
-  const raw = usageSeries.raw || [];
+  // === Feuille 4 : Usage total depuis USAGE_START par matériel ===
+  const raw = usageSeries.raw || []; // [date, eq, mat, qty]
   const sumByMat = new Map();
   raw.forEach(([d, eq, mat, q]) => {
     const qty = Number(q) || 0;
@@ -904,14 +917,14 @@ async function exportDashboardXLSX() {
     ...sheet4Rows
   ];
 
-  // === 5) FEUILLE "Usage depuis 15/08/2025 — détail jour/équipe/matériel" ===
+  // === Feuille 5 : Usage détail (jour × équipe × matériel) depuis USAGE_START ===
   const sheet5Rows = raw
     .map(([d, eq, mat, q]) => [d, eq, mat, Number(q) || 0])
     .sort((a,b)=>{
       if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1; // date
       const c1 = a[1].localeCompare(b[1], 'fr', {sensitivity:'base', numeric:true}); // équipe
       if (c1) return c1;
-      return a[2].localeCompare(b[2], 'fr', {sensitivity:'base', numeric:true}); // matériel
+      return a[2].localeCompare(b[2], 'fr', {sensitivity:'base', numeric:true});     // matériel
     });
   const sheet5 = [
     ["Période", `${USAGE_START} → ${now}`],
@@ -920,9 +933,8 @@ async function exportDashboardXLSX() {
     ...sheet5Rows
   ];
 
-  // === Construit le classeur ===
-  const wb = XLSX.utils.book_new();
-
+  // === Construction du classeur ===
+  const wb  = XLSX.utils.book_new();
   const ws1 = XLSX.utils.aoa_to_sheet(sheet1); ws1['!cols'] = autoCols(sheet1);
   const ws2 = XLSX.utils.aoa_to_sheet(sheet2); ws2['!cols'] = autoCols(sheet2);
   const ws3 = XLSX.utils.aoa_to_sheet(sheet3); ws3['!cols'] = autoCols(sheet3);
@@ -931,18 +943,18 @@ async function exportDashboardXLSX() {
 
   XLSX.utils.book_append_sheet(wb, ws1, "Stock VC (jour)");
   XLSX.utils.book_append_sheet(wb, ws2, "Entrées J+1 (plan)");
-  XLSX.utils.book_append_sheet(wb, ws3, "Besoins J+1 (éq×mat)");
+  XLSX.utils.book_append_sheet(wb, ws3, "Besoins J+1 NETS (éq×mat)");
   XLSX.utils.book_append_sheet(wb, ws4, "Usage depuis 15-08-2025");
   XLSX.utils.book_append_sheet(wb, ws5, "Usage détail (jour-eq-mat)");
 
   const fname = `dashboard_${J || now}.xlsx`;
-  // Si tu as déjà la fonction downloadXlsxFile, profite du plan B/plan C
   if (typeof downloadXlsxFile === "function") {
     await downloadXlsxFile(wb, fname);
   } else {
     XLSX.writeFile(wb, fname);
   }
 }
+
 
 /***********************
  *  Avancé
