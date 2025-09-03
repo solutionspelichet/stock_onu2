@@ -43,12 +43,10 @@ function slugify(s){
 function loadScript(src, timeoutMs = 12000) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = src;
-    s.async = true;
+    s.src = src; s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error(`Échec chargement: ${src}`));
     document.head.appendChild(s);
-    // Sécurité: timeout
     setTimeout(() => reject(new Error(`Timeout chargement: ${src}`)), timeoutMs);
   });
 }
@@ -167,25 +165,27 @@ function toTable(headers, rows) {
 async function ensureXLSXLoaded() {
   if (window.XLSX) return;
 
+  // construit une URL locale absolue et bypass cache
+  const localUrl = new URL('./xlsx.full.min.js', location.href).href + `?v=${Date.now()}`;
+
   const CANDIDATES = [
     'https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js',
     'https://unpkg.com/xlsx@0.19.3/dist/xlsx.full.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js',
-    // fallback local (déposez le fichier à côté de index.html)
-    './xlsx.full.min.js'
+    localUrl
   ];
 
   let lastErr;
   for (const url of CANDIDATES) {
     try {
       await loadScript(url, 15000);
-      if (window.XLSX) return; // chargé
+      if (window.XLSX) return; // OK
     } catch (e) {
       console.warn('[XLSX] échec sur', url, e);
       lastErr = e;
     }
   }
-  throw new Error('Impossible de charger XLSX depuis les CDNs ni en local. Vérifie le réseau/CSP ou place xlsx.full.min.js à la racine.');
+  throw new Error('Impossible de charger XLSX depuis les CDNs ni en local. Place xlsx.full.min.js à la racine ou autorise un CDN.');
 }
 
 // Préchargement pour éviter la perte du “gesture” utilisateur (iOS/Safari)
