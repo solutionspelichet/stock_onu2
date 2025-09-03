@@ -166,6 +166,38 @@ async function ensureXLSXLoaded() {
 async function preloadXLSX() {
   try { await ensureXLSXLoaded(); } catch(_) {}
 }
+async function downloadXlsxFile(wb, filename){
+  // 1) Essai standard
+  try {
+    XLSX.writeFile(wb, filename);
+    return;
+  } catch (e) {
+    console.warn("XLSX.writeFile a échoué, on tente le plan B:", e);
+  }
+
+  // 2) Plan B : buffer -> Blob -> lien
+  try {
+    const buf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+    return;
+  } catch (e) {
+    console.error("Export XLSX (plan B) a échoué:", e);
+  }
+
+  // 3) Plan C : data URL (dernier recours)
+  try {
+    const bstr = XLSX.write(wb, { bookType:'xlsx', type:'base64' });
+    window.open("data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + bstr, "_blank");
+  } catch (e) {
+    alert("Impossible de générer le fichier XLSX : " + e.message);
+  }
+}
 
 
 /***********************
@@ -716,30 +748,33 @@ async function loadDashboard() {
     msg.className = "error";
   }
 }
-async function exportDashboardXLSX() {
+async function exportAvanceXLSX() {
   await ensureXLSXLoaded();
-  const J  = document.getElementById("dashJ").value;
-  const J1 = document.getElementById("dashJ1").value;
-  const F  = document.getElementById("dashFrom").value;
-  const T  = document.getElementById("dashTo").value;
 
-  const r = await apiGetDashboard(J, J1, F, T);
   const wb = XLSX.utils.book_new();
-  const add = (name, blk)=>{
-    if (!blk) return;
-    const data = [ (blk.headers||[]), ...(blk.rows||[]) ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
-  };
-  add("Stock_VC", r.stockVC);
-  add("EntreesBib_J", r.entreesBiblioJour);
-  add("EntreesBib_J+1_plan", r.entreesBiblioJplus1_plan);
-  add("EntreesBib_J+1_reel", r.entreesBiblioJplus1_reelles);
-  add("Repartition_J", r.repartJourEquipes);
-  add("Besoins_J+1", r.besoinsJplus1Equipes);
-  add("Usage", r.usagePivot);
-  XLSX.writeFile(wb, `dashboard_${J||"J"}.xlsx`);
+  const host = document.getElementById("a_etat_table");
+
+  if (host && host.querySelector("table")) {
+    const headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
+    const rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
+      Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
+    );
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Etat_par_zone");
+  } else {
+    // Si pas de tableau affiché, on tente de charger une zone par défaut si dispo
+    const z = document.getElementById("a_zone")?.value;
+    if (z) {
+      const res = await apiGet({ etat: "1", zone: z });
+      if (Array.isArray(res) && res.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), "Etat_par_zone");
+      }
+    }
+  }
+
+  await downloadXlsxFile(wb, "avance_export.xlsx");
 }
+
+
 
 /***********************
  *  Avancé
@@ -797,14 +832,13 @@ async function loadVCLive(filterMat) {
 }
 async function exportVCLiveXLSX() {
   await ensureXLSXLoaded();
-  const host = document.getElementById("a_vc_table");
-  if (!host) { alert("Section non initialisée."); return; }
 
-  const table = host.querySelector("table");
+  const host = document.getElementById("a_vc_table");
   let headers = ["Matériel","Quantité"], rows = [];
-  if (table) {
-    headers = Array.from(table.querySelectorAll("thead th")).map(th=>th.textContent);
-    rows = Array.from(table.querySelectorAll("tbody tr")).map(tr =>
+
+  if (host && host.querySelector("table")) {
+    headers = Array.from(host.querySelectorAll("thead th")).map(th=>th.textContent);
+    rows = Array.from(host.querySelectorAll("tbody tr")).map(tr =>
       Array.from(tr.querySelectorAll("td")).map(td=>td.textContent)
     );
   } else {
@@ -812,12 +846,15 @@ async function exportVCLiveXLSX() {
     headers = r.headers || headers;
     rows = r.rows || rows;
   }
+
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   XLSX.utils.book_append_sheet(wb, ws, "Stock_VC_live");
   const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `stock_vc_live_${today}.xlsx`);
+
+  await downloadXlsxFile(wb, `stock_vc_live_${today}.xlsx`);
 }
+
 function injectVCLivePanel() {
   if (document.getElementById("a_vc_panel")) return;
   const anchor = document.getElementById("a_etat_table") || document.getElementById("advanced");
