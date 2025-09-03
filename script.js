@@ -1,6 +1,8 @@
 /* =====================
  *  ONU — Suivi Stock (Front) — Trebuchet + Orange Pelichet
  * ===================== */
+// Début de période pour les exports "usage"
+const USAGE_START = "2025-08-15"; // AAAA-MM-JJ
 
 /***********************
  *  Config API
@@ -820,53 +822,128 @@ async function exportAvanceXLSX() {
 }
 
 async function exportDashboardXLSX() {
-  const J  = document.getElementById("dashJ").value;
-  const J1 = document.getElementById("dashJ1").value;
-  const F  = document.getElementById("dashFrom").value;
-  const T  = document.getElementById("dashTo").value;
-
-  const r = await apiGetDashboard(J, J1, F, T);
-
+  // Assure-toi que la lib XLSX est chargée (local/CDN via ensureXLSXLoaded)
   try {
-    await ensureXLSXLoaded(); // essaie XLSX
-    const wb = XLSX.utils.book_new();
-    const add = (name, blk)=>{
-      if (!blk) return;
-      const data = [ (blk.headers||[]), ...(blk.rows||[]) ];
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
-    };
-    add("Stock_VC", r.stockVC);
-    add("EntreesBib_J", r.entreesBiblioJour);
-    add("EntreesBib_J+1_plan", r.entreesBiblioJplus1_plan);
-    add("EntreesBib_J+1_reel", r.entreesBiblioJplus1_reelles);
-    add("Repartition_J", r.repartJourEquipes);
-    add("Besoins_J+1", r.besoinsJplus1Equipes);
-    add("Usage", r.usagePivot);
-    const fname = `dashboard_${J||"J"}.xlsx`;
-    XLSX.writeFile(wb, fname);
+    await ensureXLSXLoaded();
   } catch (e) {
-    console.warn('XLSX indisponible, fallback CSV:', e.message);
-    // Fallback : on assemble un CSV multi-sections
-    const blocks = [
-      ['Stock_VC', r.stockVC],
-      ['EntreesBib_J', r.entreesBiblioJour],
-      ['EntreesBib_J+1_plan', r.entreesBiblioJplus1_plan],
-      ['EntreesBib_J+1_reel', r.entreesBiblioJplus1_reelles],
-      ['Repartition_J', r.repartJourEquipes],
-      ['Besoins_J+1', r.besoinsJplus1Equipes],
-      ['Usage', r.usagePivot]
-    ];
-    let csv = '';
-    blocks.forEach(([name, blk]) => {
-      if (!blk) return;
-      const aoa = [ (blk.headers||[]), ...(blk.rows||[]) ];
-      csv += `### ${name}\n` + aoaToCSV(aoa) + '\n\n';
+    alert("Librairie XLSX introuvable. Place xlsx.full.min.js à la racine ou autorise un CDN.\n" + e.message);
+    return;
+  }
+
+  const J   = document.getElementById("dashJ").value;   // jour du dashboard
+  const J1  = document.getElementById("dashJ1").value;  // J+1 sélectionné
+  const now = new Date().toISOString().slice(0,10);     // aujourd’hui (AAAA-MM-JJ)
+
+  // Récupère en parallèle tout ce dont on a besoin
+  const [vc, plan, besEq, usageSeries] = await Promise.all([
+    apiGet({ stock: "vc" }),                          // 1) Stock VC live (du jour)
+    apiGet({ plan: "reappro", date: J1 }),            // 2) Plan J+1 (agrégat)
+    apiGet({ besoins: "parEquipe", date: J1 }),       // 3) Besoins J+1 (équipe + matériel)
+    apiGet({ usage: "series", from: USAGE_START, to: now }) // 4&5) Usage séries (raw)
+  ]);
+
+  // Helper: autosize colonnes
+  const autoCols = (aoa) =>
+    aoa[0].map((_, i) => ({
+      wch: Math.max(
+        10,
+        ...aoa.map(r => (r && r[i] != null ? String(r[i]).length : 0))
+      )
+    }));
+
+  // === 1) FEUILLE "Stock VC du jour" ===
+  const vcRows = (vc.rows || []).map(r => [r[0], Number(r[1]) || 0]);
+  const sheet1 = [
+    ["Date", J || now],
+    [],
+    ["Matériel", "Quantité"],
+    ...vcRows
+  ];
+
+  // === 2) FEUILLE "Entrées biblio J+1 (plan)" ===
+  const agg = (plan.agregat || []).map(a => [a[1], Number(a[2]) || 0]); // [Matériel, Quantité]
+  const sheet2 = [
+    ["J+1", J1 || ""],
+    [],
+    ["Matériel", "Quantité"],
+    ...agg
+  ];
+
+  // === 3) FEUILLE "Besoins J+1 par équipe et matériel" ===
+  // On attend besEq.rowsEquipe: [Equipe, Matériel, Cible]
+  const eqMatRows = (besEq.rowsEquipe || []).map(r => [r[0], r[1], Number(r[2]) || 0]);
+  // Tri lisible
+  eqMatRows.sort((a,b)=>{
+    const c1 = a[0].localeCompare(b[0], 'fr', {sensitivity:'base', numeric:true});
+    if (c1) return c1;
+    return a[1].localeCompare(b[1], 'fr', {sensitivity:'base', numeric:true});
+  });
+  const sheet3 = [
+    ["J+1", J1 || ""],
+    [],
+    ["Équipe", "Matériel", "Cible"],
+    ...eqMatRows
+  ];
+
+  // === 4) FEUILLE "Usage total depuis 15/08/2025 par matériel" ===
+  // usageSeries.raw: [date, equipe, materiel, qty]
+  const raw = usageSeries.raw || [];
+  const sumByMat = new Map();
+  raw.forEach(([d, eq, mat, q]) => {
+    const qty = Number(q) || 0;
+    if (!mat || qty <= 0) return;
+    sumByMat.set(mat, (sumByMat.get(mat) || 0) + qty);
+  });
+  const sheet4Rows = Array.from(sumByMat.entries())
+    .sort((a,b)=>a[0].localeCompare(b[0], 'fr', {sensitivity:'base', numeric:true}))
+    .map(([mat, qty]) => [mat, qty]);
+  const sheet4 = [
+    ["Période", `${USAGE_START} → ${now}`],
+    [],
+    ["Matériel", "Quantité consommée"],
+    ...sheet4Rows
+  ];
+
+  // === 5) FEUILLE "Usage depuis 15/08/2025 — détail jour/équipe/matériel" ===
+  const sheet5Rows = raw
+    .map(([d, eq, mat, q]) => [d, eq, mat, Number(q) || 0])
+    .sort((a,b)=>{
+      if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1; // date
+      const c1 = a[1].localeCompare(b[1], 'fr', {sensitivity:'base', numeric:true}); // équipe
+      if (c1) return c1;
+      return a[2].localeCompare(b[2], 'fr', {sensitivity:'base', numeric:true}); // matériel
     });
-    downloadBlob(csv, `dashboard_${J||'J'}.csv`);
-    alert("Librairie XLSX non chargée : export CSV réalisé à la place.");
+  const sheet5 = [
+    ["Période", `${USAGE_START} → ${now}`],
+    [],
+    ["Date", "Équipe", "Matériel", "Quantité"],
+    ...sheet5Rows
+  ];
+
+  // === Construit le classeur ===
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.aoa_to_sheet(sheet1); ws1['!cols'] = autoCols(sheet1);
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2); ws2['!cols'] = autoCols(sheet2);
+  const ws3 = XLSX.utils.aoa_to_sheet(sheet3); ws3['!cols'] = autoCols(sheet3);
+  const ws4 = XLSX.utils.aoa_to_sheet(sheet4); ws4['!cols'] = autoCols(sheet4);
+  const ws5 = XLSX.utils.aoa_to_sheet(sheet5); ws5['!cols'] = autoCols(sheet5);
+
+  XLSX.utils.book_append_sheet(wb, ws1, "Stock VC (jour)");
+  XLSX.utils.book_append_sheet(wb, ws2, "Entrées J+1 (plan)");
+  XLSX.utils.book_append_sheet(wb, ws3, "Besoins J+1 (éq×mat)");
+  XLSX.utils.book_append_sheet(wb, ws4, "Usage depuis 15-08-2025");
+  XLSX.utils.book_append_sheet(wb, ws5, "Usage détail (jour/eq/mat)");
+
+  const fname = `dashboard_${J || now}.xlsx`;
+  // Si tu as déjà la fonction downloadXlsxFile, profite du plan B/plan C
+  if (typeof downloadXlsxFile === "function") {
+    await downloadXlsxFile(wb, fname);
+  } else {
+    XLSX.writeFile(wb, fname);
   }
 }
+
 /***********************
  *  Avancé
  ***********************/
