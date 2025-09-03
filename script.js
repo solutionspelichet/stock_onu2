@@ -40,6 +40,18 @@ function slugify(s){
   `;
   document.head.appendChild(s);
 })();
+function loadScript(src, timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Échec chargement: ${src}`));
+    document.head.appendChild(s);
+    // Sécurité: timeout
+    setTimeout(() => reject(new Error(`Timeout chargement: ${src}`)), timeoutMs);
+  });
+}
 (function injectChartCSS(){
   if (document.getElementById('chart-css')) return;
   const s = document.createElement('style');
@@ -154,12 +166,26 @@ function toTable(headers, rows) {
 }
 async function ensureXLSXLoaded() {
   if (window.XLSX) return;
-  await new Promise((res, rej) => {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js";
-    s.onload = res; s.onerror = () => rej(new Error("CDN XLSX introuvable"));
-    document.head.appendChild(s);
-  });
+
+  const CANDIDATES = [
+    'https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.19.3/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js',
+    // fallback local (déposez le fichier à côté de index.html)
+    './xlsx.full.min.js'
+  ];
+
+  let lastErr;
+  for (const url of CANDIDATES) {
+    try {
+      await loadScript(url, 15000);
+      if (window.XLSX) return; // chargé
+    } catch (e) {
+      console.warn('[XLSX] échec sur', url, e);
+      lastErr = e;
+    }
+  }
+  throw new Error('Impossible de charger XLSX depuis les CDNs ni en local. Vérifie le réseau/CSP ou place xlsx.full.min.js à la racine.');
 }
 
 // Préchargement pour éviter la perte du “gesture” utilisateur (iOS/Safari)
