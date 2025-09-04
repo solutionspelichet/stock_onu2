@@ -311,7 +311,7 @@ async function apiText(params) {
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error(HTTP ${resp.status}: ${text.slice(0,200)});
+    if (!resp.ok) throw new Error('HTTP ${resp.status}: ${text.slice(0,200)}');
     return text;
   } catch (e) {
     // JSONP renvoie { text: "..." } si createTextResponse est appelé
