@@ -297,7 +297,7 @@ async function apiGet(params) {
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error(HTTP ${resp.status}: ${text.slice(0,200)});
+    if (!resp.ok) throw new Error('HTTP ${resp.status}: ${text.slice(0,200)}');
     try { return JSON.parse(text); } catch { throw new Error(text); }
   } catch (e) {
     console.warn("fetch bloqué (CORS ?), fallback JSONP…", e);
