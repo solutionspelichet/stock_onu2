@@ -246,6 +246,47 @@ async function downloadXlsxFile(wb, filename){
   }
 }
 
+function apiGetJSONP(params = {}, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const cb = "jsonp_cb_" + Math.random().toString(36).slice(2);
+    const url = new URL(API_BASE_URL);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    url.searchParams.set("callback", cb);
+
+    let done = false;
+    function cleanup(script) {
+      try { delete window[cb]; } catch(_) {}
+      if (script && script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cb] = (data) => {
+      if (done) return;
+      done = true;
+      cleanup(script);
+      resolve(data);
+    };
+
+    const script = document.createElement("script");
+    script.src = url.toString();
+    script.async = true;
+    script.onerror = () => {
+      if (done) return;
+      done = true;
+      cleanup(script);
+      reject(new Error("JSONP error"));
+    };
+    document.head.appendChild(script);
+
+    setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup(script);
+      reject(new Error("JSONP timeout"));
+    }, timeoutMs);
+  });
+}
+
+
 
 /***********************
  *  API helpers
@@ -256,12 +297,12 @@ async function apiGet(params) {
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
+    if (!resp.ok) throw new Error(HTTP ${resp.status}: ${text.slice(0,200)});
     try { return JSON.parse(text); } catch { throw new Error(text); }
   } catch (e) {
     console.warn("fetch bloqué (CORS ?), fallback JSONP…", e);
     return await apiGetJSONP(params);
-  }
+  }
 }
 
 async function apiText(params) {
@@ -270,15 +311,15 @@ async function apiText(params) {
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
+    if (!resp.ok) throw new Error(HTTP ${resp.status}: ${text.slice(0,200)});
     return text;
   } catch (e) {
-    // JSONP renvoie un objet {text:"..."} via createTextResponse
+    // JSONP renvoie { text: "..." } si createTextResponse est appelé
     const r = await apiGetJSONP(params);
     if (r && typeof r.text === "string") return r.text;
-    // par sécurité on renvoie la structure JSONP brute
+    // Sinon on renvoie l’objet JSONP brut
     return JSON.stringify(r);
-  }
+  }
 }
 
 function setDateDefault(input, deltaDays=0) {
