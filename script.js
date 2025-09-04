@@ -252,20 +252,35 @@ async function downloadXlsxFile(wb, filename){
  ***********************/
 async function apiGet(params) {
   const url = new URL(API_BASE_URL);
-  Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
-  const resp = await fetch(url.toString(), { method: "GET" });
-  const text = await resp.text();
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
-  try { return JSON.parse(text); } catch { throw new Error(text); }
+  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  try {
+    const resp = await fetch(url.toString(), { method: "GET" });
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
+    try { return JSON.parse(text); } catch { throw new Error(text); }
+  } catch (e) {
+    console.warn("fetch bloqué (CORS ?), fallback JSONP…", e);
+    return await apiGetJSONP(params);
+  }
 }
+
 async function apiText(params) {
   const url = new URL(API_BASE_URL);
-  Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
-  const resp = await fetch(url.toString(), { method: "GET" });
-  const text = await resp.text();
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
-  return text;
+  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  try {
+    const resp = await fetch(url.toString(), { method: "GET" });
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
+    return text;
+  } catch (e) {
+    // JSONP renvoie un objet {text:"..."} via createTextResponse
+    const r = await apiGetJSONP(params);
+    if (r && typeof r.text === "string") return r.text;
+    // par sécurité on renvoie la structure JSONP brute
+    return JSON.stringify(r);
+  }
 }
+
 function setDateDefault(input, deltaDays=0) {
   const d = new Date(); d.setDate(d.getDate()+deltaDays);
   input.value = d.toISOString().slice(0,10);
