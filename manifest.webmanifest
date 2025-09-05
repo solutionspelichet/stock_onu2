@@ -1,0 +1,14 @@
+{
+  "name": "ONU — Suivi Stock",
+  "short_name": "ONU Stock",
+  "description": "Suivi des stocks Pelichet (ONU)",
+  "start_url": "/stock_onu2/index.html?source=pwa",
+  "scope": "/stock_onu2/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f16e00",
+  "icons": [
+    { "src": "/stock_onu2/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/stock_onu2/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
