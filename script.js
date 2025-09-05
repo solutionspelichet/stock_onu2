@@ -1333,3 +1333,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     alert("Référentiels (équipes & matériels) rechargés.");
   });
 });
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const scope = location.pathname.includes('/stock_onu2/') ? '/stock_onu2/' : '/';
+      navigator.serviceWorker.register(`${scope}sw.js`, { scope })
+        .then(r => console.log('SW scope:', r.scope))
+        .catch(console.error);
+    });
+  }
+</script>
