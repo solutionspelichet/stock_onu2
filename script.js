@@ -254,10 +254,10 @@ function apiGetJSONP(params = {}, timeoutMs = 15000) {
     url.searchParams.set("callback", cb);
 
     let done = false;
-    function cleanup(script) {
+    const cleanup = (script) => {
       try { delete window[cb]; } catch(_) {}
       if (script && script.parentNode) script.parentNode.removeChild(script);
-    }
+    };
 
     window[cb] = (data) => {
       if (done) return;
@@ -269,21 +269,11 @@ function apiGetJSONP(params = {}, timeoutMs = 15000) {
     const script = document.createElement("script");
     script.src = url.toString();
     script.async = true;
-    script.onerror = () => {
-      if (done) return;
-      done = true;
-      cleanup(script);
-      reject(new Error("JSONP error"));
-    };
+    script.onerror = () => { if (!done) { done = true; cleanup(script); reject(new Error("JSONP error")); } };
     document.head.appendChild(script);
 
-    setTimeout(() => {
-      if (done) return;
-      done = true;
-      cleanup(script);
-      reject(new Error("JSONP timeout"));
-    }, timeoutMs);
-  });
+    setTimeout(() => { if (!done) { done = true; cleanup(script); reject(new Error("JSONP timeout")); } }, timeoutMs);
+  });
 }
 
 
@@ -291,36 +281,35 @@ function apiGetJSONP(params = {}, timeoutMs = 15000) {
 /***********************
  *  API helpers
  ***********************/
-async function apiGet(params) {
+async function apiGet(params = {}) {
   const url = new URL(API_BASE_URL);
-  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error('HTTP ${resp.status}: ${text.slice(0,200)}');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
     try { return JSON.parse(text); } catch { throw new Error(text); }
   } catch (e) {
     console.warn("fetch bloqué (CORS ?), fallback JSONP…", e);
-    return await apiGetJSONP(params);
-  }
+    return apiGetJSONP(params);
+  }
 }
 
-async function apiText(params) {
+async function apiText(params = {}) {
   const url = new URL(API_BASE_URL);
-  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   try {
     const resp = await fetch(url.toString(), { method: "GET" });
     const text = await resp.text();
-    if (!resp.ok) throw new Error('HTTP ${resp.status}: ${text.slice(0,200)}');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0,200)}`);
     return text;
   } catch (e) {
-    // JSONP renvoie { text: "..." } si createTextResponse est appelé
     const r = await apiGetJSONP(params);
     if (r && typeof r.text === "string") return r.text;
-    // Sinon on renvoie l’objet JSONP brut
     return JSON.stringify(r);
-  }
+  }
 }
+
 
 function setDateDefault(input, deltaDays=0) {
   const d = new Date(); d.setDate(d.getDate()+deltaDays);
@@ -1333,13 +1322,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     alert("Référentiels (équipes & matériels) rechargés.");
   });
 });
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      const scope = location.pathname.includes('/stock_onu2/') ? '/stock_onu2/' : '/';
-      navigator.serviceWorker.register(`${scope}sw.js`, { scope })
-        .then(r => console.log('SW scope:', r.scope))
-        .catch(console.error);
-    });
-  }
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // base path du site (ex: /stock_onu2/)
+    const scope = location.pathname.replace(/[^/]+$/, '');
+    navigator.serviceWorker.register(`${scope}sw.js`, { scope })
+      .then(r => console.log('SW enregistré, scope:', r.scope))
+      .catch(err => console.error('SW register error:', err));
+  });
+}
 
